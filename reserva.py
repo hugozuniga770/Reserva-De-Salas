@@ -43,12 +43,28 @@ try:
     boton_confirmar = driver.find_element(By.XPATH, "//button[@type='submit']")
     boton_confirmar.click()
     
-    print("¡Reserva ejecutada exitosamente!")
+    print("Esperando respuesta del servidor...")
+    try:
+        # Espera hasta 5 segundos a que aparezca la caja de alerta
+        mensaje_alerta = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "alert")))
+        texto_mensaje = mensaje_alerta.text
+        clase_alerta = mensaje_alerta.get_attribute("class")
+        
+        if "alert-success" in clase_alerta:
+            print(f"✅ RESERVA CONFIRMADA: {texto_mensaje}")
+        elif "alert-danger" in clase_alerta:
+            print(f"❌ LA PÁGINA RECHAZÓ LA RESERVA: {texto_mensaje}")
+        else:
+            print(f"ℹ️ MENSAJE DEL SISTEMA: {texto_mensaje}")
+            
+    except Exception as e:
+        print("⚠️ No apareció ningún mensaje de confirmación o error claro tras hacer clic.")
+        driver.save_screenshot("resultado_desconocido.png")
+
     time.sleep(2)
 
 except Exception as e:
-    print(f"Error detectado: {e}")
-    # Toma una captura de pantalla si falla para que puedas ver el error en GitHub
+    print(f"Error detectado durante el proceso: {e}")
     driver.save_screenshot("error_screenshot.png")
     raise e 
 

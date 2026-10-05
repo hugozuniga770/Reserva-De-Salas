@@ -1,11 +1,10 @@
-name: Bot de Reservas UPB
+name: Bot de Reservas Escalonado
 
 on:
   schedule:
-    # GitHub Actions usa la zona horaria UTC.
-    # Las 00:05 UTC corresponden exactamente a las 20:05 en Bolivia.
-    - cron: '5 0 * * *'
-  workflow_dispatch: # Te agrega un botón en GitHub para ejecutarlo manualmente cuando quieras
+    # Inicia el proceso a las 20:01 (00:01 UTC)
+    - cron: '1 0 * * *'
+  workflow_dispatch:
 
 jobs:
   ejecutar-bot:
@@ -23,12 +22,50 @@ jobs:
     - name: Instalar Selenium
       run: pip install -r requirements.txt
 
-    - name: Correr el script de reserva
+    # --- INTENTO 1: 20:01 ---
+    - name: Intento 1 (20:01) - reserva.py
+      id: intento1
+      continue-on-error: true # Permite que el proceso no se rompa si falla
+      run: python reserva.py
+
+    # --- INTENTO 2: 20:05 ---
+    - name: Pausa de 4 minutos
+      if: steps.intento1.outcome == 'failure'
+      run: sleep 240
+
+    - name: Intento 2 (20:05 aprox) - reserva1.py
+      id: intento2
+      if: steps.intento1.outcome == 'failure'
+      continue-on-error: true
       run: python reserva1.py
 
-    - name: Guardar captura de pantalla si hay un error
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: error-screenshot
-        path: error_screenshot.png
+    # --- INTENTO 3: 20:10 ---
+    - name: Pausa de 5 minutos
+      if: steps.intento2.outcome == 'failure'
+      run: sleep 300
+
+    - name: Intento 3 (20:10 aprox) - reserva2.py
+      id: intento3
+      if: steps.intento2.outcome == 'failure'
+      continue-on-error: true
+      run: python reserva2.py
+
+    # --- INTENTO 4: 20:15 ---
+    - name: Pausa de 5 minutos
+      if: steps.intento3.outcome == 'failure'
+      run: sleep 300
+
+    - name: Intento 4 (20:15 aprox) - reserva.py
+      id: intento4
+      if: steps.intento3.outcome == 'failure'
+      continue-on-error: true
+      run: python reserva.py
+
+    # --- INTENTO 5: 20:20 ---
+    - name: Pausa de 5 minutos
+      if: steps.intento4.outcome == 'failure'
+      run: sleep 300
+
+    - name: Intento 5 (20:20 aprox) - reserva1.py
+      if: steps.intento4.outcome == 'failure'
+      run: python reserva1.py

@@ -3,8 +3,8 @@ name: Bot de Reservas UPB
 on:
   schedule:
     # GitHub Actions usa la zona horaria UTC.
-    # Las 00:01 UTC corresponden exactamente a las 20:01 en Bolivia.
-    - cron: '1 0 * * *'
+    # Las 00:05 UTC corresponden exactamente a las 20:05 en Bolivia.
+    - cron: '5 0 * * *'
   workflow_dispatch: # Te agrega un botón en GitHub para ejecutarlo manualmente cuando quieras
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
       run: pip install -r requirements.txt
 
     - name: Correr el script de reserva
-      run: python reserva.py
+      run: python reserva1.py
 
     - name: Guardar captura de pantalla si hay un error
       if: failure()

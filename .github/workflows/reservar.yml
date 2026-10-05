@@ -1,14 +1,18 @@
-name: Bot de Reservas 4PM - 2AM
+name: Bot de Reservas 24/7
 
 on:
   schedule:
-    # TURNO 1: Inicia a las 16:00 de Bolivia (20:00 UTC)
-    # Este bucle correrá por 6 horas (hasta las 22:00)
-    - cron: '0 20 * * *'
+    # TURNO 1: 14:00 a 20:00 (Hora Bolivia)
+    - cron: '0 18 * * *'
     
-    # TURNO 2: Inicia a las 22:00 de Bolivia (02:00 UTC del día siguiente)
-    # Este bucle continuará desde las 22:00 hasta las 04:00 AM
-    - cron: '0 2 * * *'
+    # TURNO 2: 20:00 a 02:00 (Hora Bolivia)
+    - cron: '0 0 * * *'
+    
+    # TURNO 3: 02:00 a 08:00 (Hora Bolivia)
+    - cron: '0 6 * * *'
+    
+    # TURNO 4: 08:00 a 14:00 (Hora Bolivia)
+    - cron: '0 12 * * *'
   workflow_dispatch:
 
 jobs:

@@ -4,10 +4,10 @@ import sys
 
 # Lista de tus archivos en el orden que quieres que roten
 archivos = ["reserva.py", "reserva1.py", "reserva2.py"]
-minutos_espera = 5
+minutos_espera = 1
 
-# 72 intentos x 5 minutos = 6 horas exactas (el límite máximo de GitHub)
-max_intentos = 72 
+# 100 intentos x 1 minutos = 6 horas exactas (el límite máximo de GitHub)
+max_intentos = 1440
 
 print("Iniciando bucle de reservas escalonado...")
 

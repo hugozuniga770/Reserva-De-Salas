@@ -6,8 +6,8 @@ import sys
 archivos = ["reserva.py", "reserva1.py", "reserva2.py"]
 minutos_espera = 1
 
-# 100 intentos x 1 minutos = 6 horas exactas (el límite máximo de GitHub)
-max_intentos = 1440
+# 280 intentos x ~1.25 minutos = ~5.8 horas (termina justo antes del límite de GitHub)
+max_intentos = 280
 
 print("Iniciando bucle de reservas escalonado...")
 

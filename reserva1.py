@@ -22,7 +22,6 @@ try:
     wait = WebDriverWait(driver, 15)
     
     print("Seleccionando la Sala F...")
-    # Selector ajustado para la Sala de estudio B
     sala_select = Select(wait.until(EC.presence_of_element_located((By.ID, "roomSelect"))))
     sala_select.select_by_visible_text("Sala de estudio F") 
     time.sleep(1) 
@@ -32,9 +31,9 @@ try:
     driver.find_element(By.NAME, "last_name").send_keys("Zúñiga Daza")
     driver.find_element(By.NAME, "code").send_keys("95503")
 
-    print("Marcando horario 12:15 – 14:15...")
-    # Selector ajustado para el horario de la noche
-    xpath_horario = "//input[@value='12:15–14:15']/following-sibling::label"
+    print("Marcando horario 12:15 - 14:15...")
+    # Selector del horario
+    xpath_horario = "//input[@value='12:15-14:15']/following-sibling::label"
     boton_horario = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_horario)))
     boton_horario.click()
 
@@ -54,14 +53,20 @@ try:
         
         if "alert-success" in clase_alerta:
             print(f"✅ RESERVA CONFIRMADA: {texto_mensaje}")
+            
         elif "alert-danger" in clase_alerta:
             print(f"❌ LA PÁGINA RECHAZÓ LA RESERVA: {texto_mensaje}")
+            raise Exception("Reserva rechazada por el servidor.") 
+            
         else:
             print(f"ℹ️ MENSAJE DEL SISTEMA: {texto_mensaje}")
+            raise Exception("Mensaje desconocido, asumiendo fallo.")
             
     except Exception as e:
-        print("⚠️ No apareció ningún mensaje de confirmación o error claro tras hacer clic.")
-        driver.save_screenshot("resultado_desconocido.png")
+        if "Reserva rechazada" not in str(e) and "Mensaje desconocido" not in str(e):
+            print("⚠️ No apareció ningún mensaje de confirmación o error claro tras hacer clic.")
+            driver.save_screenshot("resultado_desconocido.png")
+        raise e
 
     time.sleep(2)
 

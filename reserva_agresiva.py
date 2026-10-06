@@ -14,6 +14,11 @@ PROPOSITO = "Estudio académico"
 VALOR_SALA_F = "8"
 ID_HORARIO = "slot_b0030e1d389405aae784568ad8e26553"
 
+# Configuración del relevo temporal
+TIEMPO_INICIO = time.time()
+# 2 horas (7200 segundos) menos 5 minutos (300 segundos) de margen de seguridad
+LIMITE_TIEMPO_SEGUNDOS = 6900 
+
 def cazar_sala():
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
@@ -23,53 +28,51 @@ def cazar_sala():
     options.page_load_strategy = 'eager' 
 
     driver = webdriver.Chrome(options=options)
+    intento = 1
 
     try:
         print("Iniciando modo francotirador para Sala F (12:15 - 14:15)...")
+        print("Este turno correrá por exactamente 1 hora y 55 minutos.")
         
-        for intento in range(2000): 
+        # El bucle correrá MIENTRAS no se alcance el límite de tiempo
+        while (time.time() - TIEMPO_INICIO) < LIMITE_TIEMPO_SEGUNDOS:
             driver.get("https://atari.scz.upb.edu/student_reservation.php")
             
             try:
-                # 1. Seleccionar la Sala F del menú desplegable
+                # 1. Seleccionar la Sala F
                 select_sala = Select(driver.find_element(By.ID, "roomSelect"))
                 select_sala.select_by_value(VALOR_SALA_F)
                 
-                # Pausa mínima para que el JavaScript actualice los horarios disponibles
                 time.sleep(0.3) 
                 
-                # 2. Buscar el radio button del horario 12:15
+                # 2. Revisar el horario de las 12:15
                 horario_radio = driver.find_element(By.ID, ID_HORARIO)
                 
-                # 3. Verificar si NO tiene el atributo 'disabled'
+                # 3. Si se libera, ataca
                 if not horario_radio.get_attribute("disabled"):
-                    print(f"\n¡SALA LIBRE DETECTADA EN EL INTENTO {intento + 1}!")
+                    print(f"\n¡SALA LIBRE DETECTADA EN EL INTENTO {intento}!")
                     
-                    # Hacer clic en la etiqueta (label) porque el radio está oculto por CSS
                     driver.find_element(By.XPATH, f"//label[@for='{ID_HORARIO}']").click()
                     
-                    # 4. Llenar rápidamente el formulario de reserva
                     driver.find_element(By.NAME, "first_name").send_keys(NOMBRE)
                     driver.find_element(By.NAME, "last_name").send_keys(APELLIDO)
                     driver.find_element(By.NAME, "code").send_keys(CODIGO)
                     driver.find_element(By.NAME, "purpose").send_keys(PROPOSITO)
                     
-                    # 5. Confirmar reserva (usando la clase del botón)
                     driver.find_element(By.CSS_SELECTOR, ".btn-submit").click()
                     
-                    print("✅ Reserva asegurada. Apagando francotirador.")
+                    print("✅ Reserva asegurada. Apagando francotirador definitivamente.")
                     return True
                 else:
-                    print(f"\rIntento {intento + 1}: Sala F sigue ocupada...", end="", flush=True)
+                    print(f"\rIntento {intento}: Sala F sigue ocupada... (Tiempo activo: {int(time.time() - TIEMPO_INICIO)}s)", end="", flush=True)
                     
-            except Exception as e:
-                # Si algún elemento no carga rápido, no rompe el bucle
-                pass
+            except Exception:
+                pass # Ignora errores de carga y sigue intentando
 
-            # Pausa breve antes de recargar la página
+            intento += 1
             time.sleep(2)
 
-        print("\n❌ Se agotó el tiempo de búsqueda.")
+        print("\n⏳ Tiempo de turno agotado. Apagando para permitir el inicio del siguiente bot de GitHub.")
         return False
 
     finally:
@@ -77,7 +80,5 @@ def cazar_sala():
 
 if __name__ == "__main__":
     exito = cazar_sala()
-    if exito:
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    # Si tiene éxito (True), devuelve 0. Si se le acaba el tiempo (False), devuelve 0 para no marcar error en GitHub.
+    sys.exit(0)

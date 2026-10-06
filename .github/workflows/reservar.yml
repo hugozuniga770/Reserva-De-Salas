@@ -3,7 +3,7 @@ name: Francotirador Sala F 24/7
 on:
   schedule:
     # Este cron lanza el bot en el minuto 0 de cada 2 horas (00:00, 02:00, 04:00...)
-    - cron: '0 */2 * * *'
+    - cron: '30 1/2 * * *'
   workflow_dispatch:
 
 # Esta regla evita que tengas múltiples bots corriendo al mismo tiempo por accidente

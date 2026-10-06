@@ -1,22 +1,18 @@
-name: Bot de Reservas 24/7
+name: Francotirador Sala F 24/7
 
 on:
   schedule:
-    # TURNO 1: 14:00 a 20:00 (Hora Bolivia)
-    - cron: '0 18 * * *'
-    
-    # TURNO 2: 20:00 a 02:00 (Hora Bolivia)
-    - cron: '0 0 * * *'
-    
-    # TURNO 3: 02:00 a 08:00 (Hora Bolivia)
-    - cron: '0 6 * * *'
-    
-    # TURNO 4: 08:00 a 14:00 (Hora Bolivia)
-    - cron: '0 12 * * *'
+    # Este cron lanza el bot en el minuto 0 de cada 2 horas (00:00, 02:00, 04:00...)
+    - cron: '0 */2 * * *'
   workflow_dispatch:
 
+# Esta regla evita que tengas múltiples bots corriendo al mismo tiempo por accidente
+concurrency:
+  group: francotirador-bot
+  cancel-in-progress: true
+
 jobs:
-  ejecutar-bucle:
+  cazar-sala:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,15 +24,8 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Instalar dependencias
-      run: pip install -r requirements.txt
+    - name: Instalar Selenium
+      run: pip install selenium 
 
-    - name: Correr el Bucle de Reservas
-      run: python bucle.py
-
-    - name: Guardar captura de pantalla del último error
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: error-screenshot-final
-        path: error_screenshot.png
+    - name: Iniciar Francotirador (Turno de 2 horas)
+      run: python reserva_agresiva.py

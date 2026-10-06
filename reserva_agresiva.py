@@ -11,8 +11,8 @@ CODIGO = "95503"
 PROPOSITO = "Estudio académico"
 
 # IDs extraídos del código fuente de Atari
-VALOR_SALA_F = "8"
-ID_HORARIO = "slot_b0030e1d389405aae784568ad8e26553"
+VALOR_SALA_F = "8"  # Esto se mantiene igual para la Sala F
+ID_HORARIO = "slot_94b8b48865360042a741a450c6441be0"  # ¡Este es el ID exacto para las 07:45 - 09:45!
 
 # Configuración del relevo temporal
 TIEMPO_INICIO = time.time()

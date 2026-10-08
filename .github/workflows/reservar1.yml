@@ -1,0 +1,31 @@
+name: Francotirador Sala F 24/7
+
+on:
+  schedule:
+    # Este cron lanza el bot en el minuto 0 de cada 2 horas (00:00, 02:00, 04:00...)
+    - cron: '30 1,3,5,7,9,11,13,15,17,19,21,23 * * *'
+  workflow_dispatch:
+
+# Esta regla evita que tengas múltiples bots corriendo al mismo tiempo por accidente
+concurrency:
+  group: francotirador-bot
+  cancel-in-progress: true
+
+jobs:
+  cazar-sala:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Clonar el repositorio
+      uses: actions/checkout@v4
+
+    - name: Configurar entorno de Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Instalar Selenium
+      run: pip install selenium 
+
+    - name: Iniciar Francotirador (Turno de 2 horas)
+      run: python horario_A.py

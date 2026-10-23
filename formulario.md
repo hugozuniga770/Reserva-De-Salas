@@ -1,29 +1,50 @@
-# Diccionario de IDs: Reservas UPB[cite: 6]
+# Diccionario del formulario (atari.scz.upb.edu/student_reservation.php)
 
-A continuación, se listan todos los identificadores exactos extraídos del código fuente del portal para configurar tu bot de reservas[cite: 6].
+El formulario se envía por `POST` a la misma URL con estos campos:
 
-## 🏢 Valores de las Salas
-Estos son los números que debes colocar en la variable `VALOR_SALA_F` (puedes cambiarle el nombre a la variable en tu código si eliges otra sala)[cite: 6].
+| Campo         | Ejemplo               |
+| :------------ | :-------------------- |
+| `room`        | `8`                   |
+| `first_name`  | `Hugo Rafael`         |
+| `last_name`   | `Zúñiga Daza`         |
+| `code`        | `95503`               |
+| `schedule`    | `12:15-14:15`         |
+| `purpose`     | `Estudio académico`   |
 
-| Nombre de la Sala | Valor a usar |
-| :--- | :--- |
-| Sala de estudio B | `15`[cite: 6] |
-| Sala de estudio C | `3`[cite: 6] |
-| Sala de estudio D | `6`[cite: 6] |
-| Sala de estudio F | `8`[cite: 6] |
-| Sala de estudio G | `9`[cite: 6] |
-| Sala de estudio H | `14`[cite: 6] |
-| Sala de lectura A | `10`[cite: 6] |
-| Sala de lectura D | `13`[cite: 6] |
+## Salas (`room` → variable `UPB_SALAS`)
 
-## ⏰ IDs de los Horarios
-Estos son los códigos que debes colocar en la variable `ID_HORARIO` de tu script en Python[cite: 6].
+| Sala              | ID   |
+| :---------------- | :--- |
+| Sala de estudio B | `15` |
+| Sala de estudio C | `3`  |
+| Sala de estudio D | `6`  |
+| Sala de estudio F | `8`  |
+| Sala de estudio G | `9`  |
+| Sala de estudio H | `14` |
+| Sala de lectura A | `10` |
+| Sala de lectura D | `13` |
 
-| Bloque Horario | ID exacto para el bot |
-| :--- | :--- |
-| 07:45 – 09:45 | `slot_94b8b48865360042a741a450c6441be0`[cite: 6] |
-| 10:00 – 12:00 | `slot_cc9dc7dfdbf99c1d42f944c656c62e4d`[cite: 6] |
-| 12:15 – 14:15 | `slot_b0030e1d389405aae784568ad8e26553`[cite: 6] |
-| 14:30 – 16:30 | `slot_fc5e47c4011ddab1419ef6e9da33154c`[cite: 6] |
-| 16:45 – 18:45 | `slot_e7a3d271d18d86dc1ab2bca33b63f319`[cite: 6] |
-| 19:00 – 21:00 | `slot_e93ad1f8c976ce25fcaaa7539e2233dd`[cite: 6] |
+## Horarios (`schedule` → variable `UPB_HORARIO`)
+
+El servidor usa el texto del horario sin cero inicial. Los `id` de los radio
+buttons (`slot_…`) son simplemente el MD5 de ese texto, por eso no cambian.
+
+| Bloque        | `schedule`     | id del radio                              |
+| :------------ | :------------- | :---------------------------------------- |
+| 07:45 – 09:45 | `7:45-9:45`    | `slot_94b8b48865360042a741a450c6441be0`   |
+| 10:00 – 12:00 | `10:00-12:00`  | `slot_cc9dc7dfdbf99c1d42f944c656c62e4d`   |
+| 12:15 – 14:15 | `12:15-14:15`  | `slot_b0030e1d389405aae784568ad8e26553`   |
+| 14:30 – 16:30 | `14:30-16:30`  | `slot_fc5e47c4011ddab1419ef6e9da33154c`   |
+| 16:45 – 18:45 | `16:45-18:45`  | `slot_e7a3d271d18d86dc1ab2bca33b63f319`   |
+| 19:00 – 21:00 | `19:00-21:00`  | `slot_e93ad1f8c976ce25fcaaa7539e2233dd`   |
+
+## De dónde sale la disponibilidad
+
+La página trae dentro de un `<script>`:
+
+- `const occupied = {"8": {"12:15-14:15": true, ...}, ...}` → qué está ocupado por sala.
+- `events: [{"title": "Nombre Apellido — Sala", "extendedProps": {"slot": "...", "room": "..."}}]`
+  → el calendario; es lo que el bot usa para **confirmar** que la reserva es tuya.
+- `const today = 'AAAA-MM-DD'` → la fecha del servidor (cambia a las 20:00 hora Bolivia).
+
+Los mensajes de resultado vienen como `.alert-success` / `.alert-danger`.

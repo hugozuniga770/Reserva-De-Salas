@@ -1,1 +1,1 @@
-selenium>=4.18.0
+requests>=2.31

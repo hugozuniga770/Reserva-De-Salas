@@ -1,31 +1,61 @@
-name: Francotirador Sala F Horario C 24/7
+name: Reserva Sala UPB
 
 on:
   schedule:
-    # Este cron lanza el bot en el minuto 0 de cada 2 horas (00:00, 02:00, 04:00...)
-    - cron: '30 1,3,5,7,9,11,13,15,17,19,21,23 * * *'
+    # GitHub usa UTC. Bolivia = UTC-4.
+    # Sondeo general cada 2 h en el minuto 15 de las horas UTC impares
+    # (17:15, 19:15, 21:15… hora Bolivia) — por si alguien cancela de día.
+    - cron: '15 1-23/2 * * *'
+    # Corrida dedicada a la ventana crítica: arranca a las 22:50 UTC = 18:50 BO,
+    # 10 min antes de las 19:00, con margen por si GitHub la retrasa (puede
+    # pasar 5-30 min). Dura más (ver UPB_MAX_MINUTOS abajo) para cubrir hasta
+    # las 21:00 BO aunque el servidor ande lento/inestable esa hora.
+    - cron: '50 22 * * *'
   workflow_dispatch:
+    inputs:
+      salas:
+        description: 'IDs de sala en orden de preferencia (8=F, 6=D, 15=B, 3=C — de estudio; también existen 9=G, 14=H)'
+        required: false
+        default: ''
+      horario:
+        description: 'Horario, p. ej. 12:15-14:15'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Prueba sin reservar'
+        type: boolean
+        default: false
 
-# Esta regla evita que tengas múltiples bots corriendo al mismo tiempo por accidente
+# Nunca dos bots a la vez, y NUNCA matar uno que está enviando una reserva:
+# la siguiente ejecución espera en cola a que termine la anterior.
 concurrency:
-  group: francotirador-bot
-  cancel-in-progress: true
+  group: reserva-sala-upb
+  cancel-in-progress: false
 
 jobs:
-  cazar-sala:
+  reservar:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 155
     steps:
-    - name: Clonar el repositorio
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Configurar entorno de Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
 
-    - name: Instalar Selenium
-      run: pip install selenium 
+      - run: pip install -r requirements.txt
 
-    - name: Iniciar Francotirador (Turno de 2 horas)
-      run: python reserva_agresiva.py
+      - name: Reservar (con verificación)
+        env:
+          UPB_NOMBRE:   ${{ secrets.UPB_NOMBRE }}
+          UPB_APELLIDO: ${{ secrets.UPB_APELLIDO }}
+          UPB_CODIGO:   ${{ secrets.UPB_CODIGO }}
+          NTFY_TOPIC:   ${{ secrets.NTFY_TOPIC }}
+          UPB_SALAS:    ${{ inputs.salas   || vars.UPB_SALAS   || '8,6,15,3' }}
+          UPB_HORARIO:  ${{ inputs.horario || vars.UPB_HORARIO || '12:15-14:15' }}
+          UPB_DRY_RUN:  ${{ inputs.dry_run && '1' || '0' }}
+          # 140 min solo para la corrida de las 18:50 BO (cubre 18:50→21:10
+          # BO de sobra); las demás corridas se quedan en 112 min, de a par.
+          UPB_MAX_MINUTOS: ${{ github.event.schedule == '50 22 * * *' && '140' || '112' }}
+        run: python reserva_bot.py

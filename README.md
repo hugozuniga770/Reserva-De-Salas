@@ -71,10 +71,10 @@ La versión con Selenium imprimía «✅ Reserva asegurada» apenas hacía clic 
 ## Configuración
 
 1. **Settings → Secrets and variables → Actions → Secrets**:
-   - `UPB_NOMBRE` = `Hugo Rafael`
-   - `UPB_APELLIDO` = `Zúñiga Daza`
+   - `UPB_NOMBRE` = `Nombre Ejemplo`
+   - `UPB_APELLIDO` = `Apellido Ejemplo`
    - `UPB_CODIGO` = tu código
-   - `NTFY_TOPIC` *(opcional)* = un nombre largo y raro, p. ej. `hugo-salas-upb-x7k2q`;
+   - `NTFY_TOPIC` *(opcional)* = un nombre largo y raro, p. ej. `ejemplo-salas-upb-x7k2q`;
      instala la app **ntfy** y suscríbete a ese tema para recibir el aviso.
 2. **Variables** (opcional): `UPB_SALAS` (def. `8`) y `UPB_HORARIO` (def. `12:15-14:15`).
 3. Para probar: **Actions → Reserva Sala UPB → Run workflow** con *dry_run* marcado.
@@ -86,7 +86,7 @@ pip install -r requirements.txt pytest
 python -m pytest -q
 
 # dry-run contra el sitio real
-UPB_NOMBRE="Hugo Rafael" UPB_APELLIDO="Zúñiga Daza" UPB_CODIGO="xxxxx" \
+UPB_NOMBRE="Nombre Ejemplo" UPB_APELLIDO="Apellido Ejemplo" UPB_CODIGO="xxxxx" \
 UPB_DRY_RUN=1 UPB_MAX_MINUTOS=1 python reserva_bot.py
 ```
 

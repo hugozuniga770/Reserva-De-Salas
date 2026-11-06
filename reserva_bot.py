@@ -32,9 +32,16 @@ Variables de entorno:
                     "de estudio" (def. "8,6,15,3" = Sala F, D, B, C)
   UPB_HORARIO      p. ej. "12:15-14:15" (def.)
   UPB_PROPOSITO    texto de la actividad (def. "Estudio académico")
-  UPB_MAX_MINUTOS  duración máxima de la ejecución (def. 112)
+  UPB_HASTA_BO     hora Bolivia en que termina la ejecución (def. "21:15"). Así no
+                    importa a qué hora arranque GitHub: el bot espera solo hasta la
+                    apertura y se queda hasta esta hora. Vacío = sin límite por reloj.
+  UPB_MAX_MINUTOS  tope de seguridad de duración (def. 340; GitHub corta a los 360)
   UPB_APERTURA_BO  hora Bolivia en que el servidor abre el día siguiente (def. "20:00")
   UPB_DRY_RUN      "1" = no envía nada, sólo dice qué haría
+  UPB_AUTO_APROBAR "1" = las solicitudes pendientes se aprueban solas (def. "1")
+  UPB_AUTO_APROBAR_BO  hora Bolivia de la auto-aprobación (def. "18:30")
+  UPB_MAX_PERSONAS tope de personas por noche, contándote a ti (def. 4)
+  UPB_CLAVE_PRIVADA, UPB_GH_TOKEN, UPB_REPO  para leer solicitudes cifradas (ver solicitudes.py)
   NTFY_TOPIC       opcional: tema de ntfy.sh para recibir una notificación al celular
 
 Códigos de salida:
@@ -63,7 +70,11 @@ VERSION = "2.0"
 URL_DEFECTO = "https://atari.scz.upb.edu/student_reservation.php"
 BO_TZ = timezone(timedelta(hours=-4), "BOT")  # Bolivia: UTC-4 todo el año, sin horario de verano
 
-EXIT_OK, EXIT_CONFIG, EXIT_RECHAZOS, EXIT_SITIO = 0, 1, 2, 3
+EXIT_OK, EXIT_CONFIG, EXIT_RECHAZOS, EXIT_SITIO, EXIT_TARDE = 0, 1, 2, 3, 4
+MARCADOR_TICKET = "<!-- reserva-upb:v1 -->"
+# Corridas de tickets: más suaves que la tuya, para no multiplicar la carga y que tú llegues primero.
+RITMO_TICKET = {"intervalo": 4.0, "intervalo_medio": 2.0, "intervalo_rafaga": 1.0}
+PRIORIDAD_DUENIO_SEG = 20  # los tickets no tocan tu sala favorita en los primeros 20 s tras la apertura
 
 
 # ───────────────────────────── utilidades ──────────────────────────────
@@ -123,16 +134,20 @@ class Config:
     horario: str
     proposito: str = "Estudio académico"
     url: str = URL_DEFECTO
-    max_segundos: float = 112 * 60
+    max_segundos: float = 340 * 60
     intervalo: float = 2.0            # buscando una sala que se libere
     intervalo_medio: float = 1.0      # banda ancha alrededor de la apertura
     intervalo_rafaga: float = 0.25    # núcleo de la apertura del día siguiente
     intervalo_espera: float = 30.0    # cuando ya no hay nada que hacer hasta la banda
     pausa_verificacion: float = 2.0
     apertura_bo: str = "20:00"
+    hasta_bo: str = "21:15"
     dry_run: bool = False
     max_rechazos: int = 5
     ntfy_topic: str = ""
+    auto_aprobar: bool = True
+    auto_aprobar_bo: str = "18:30"
+    max_personas: int = 4
     reloj: Callable[[], datetime] = field(default=lambda: datetime.now(BO_TZ))
     dormir: Callable[[float], None] = time.sleep
 
@@ -160,6 +175,11 @@ class Config:
         apertura = os.getenv("UPB_APERTURA_BO", "20:00").strip()
         if not re.fullmatch(r"\d{1,2}:\d{2}", apertura):
             raise ValueError("UPB_APERTURA_BO debe tener formato HH:MM")
+        hasta = os.getenv("UPB_HASTA_BO", "21:15").strip()
+        if hasta and not re.fullmatch(r"\d{1,2}:\d{2}", hasta):
+            raise ValueError("UPB_HASTA_BO debe tener formato HH:MM (o vacío)")
+        if not re.fullmatch(r"\d{1,2}:\d{2}", os.getenv("UPB_AUTO_APROBAR_BO", "18:30").strip() or "18:30"):
+            raise ValueError("UPB_AUTO_APROBAR_BO debe tener formato HH:MM")
         return cls(
             nombre=os.environ["UPB_NOMBRE"].strip(),
             apellido=os.environ["UPB_APELLIDO"].strip(),
@@ -168,11 +188,43 @@ class Config:
             horario=normalizar_horario(os.getenv("UPB_HORARIO", "12:15-14:15")),
             proposito=os.getenv("UPB_PROPOSITO", "Estudio académico").strip() or "Estudio académico",
             url=os.getenv("UPB_URL", URL_DEFECTO).strip(),
-            max_segundos=float(os.getenv("UPB_MAX_MINUTOS", "112")) * 60,
+            max_segundos=float(os.getenv("UPB_MAX_MINUTOS", "340") or "340") * 60,
             apertura_bo=apertura,
+            hasta_bo=hasta,
             dry_run=os.getenv("UPB_DRY_RUN", "0").strip().lower() in ("1", "true", "si", "sí", "yes"),
             ntfy_topic=os.getenv("NTFY_TOPIC", "").strip(),
+            auto_aprobar=os.getenv("UPB_AUTO_APROBAR", "1").strip().lower() in ("1", "true", "si", "sí", "yes"),
+            auto_aprobar_bo=(os.getenv("UPB_AUTO_APROBAR_BO", "18:30").strip() or "18:30"),
+            max_personas=max(1, int(os.getenv("UPB_MAX_PERSONAS", "4").strip() or "4")),
         )
+
+
+@dataclass
+class Persona:
+    """Alguien para quien el bot reserva: tú (dueño) o una solicitud aprobada."""
+    nombre: str
+    apellido: str
+    codigo: str
+    salas: list[str]
+    horario: str
+    proposito: str
+    etiqueta: str                 # nombre seguro para logs públicos ("tú", "solicitud #12")
+    es_duenio: bool = False
+    fecha: date | None = None     # fecha de uso pedida; None = la que esté abierta
+    ntfy: str = ""
+    issue: int | None = None
+    aprobada: bool = True
+    # estado durante la ejecución
+    hecha_en: date | None = None
+    reservada_aqui: bool = False
+    cerrada: bool = False
+    ultimo_rechazo: str = ""
+    rechazos_iguales: int = 0
+
+    @property
+    def clave_nombre(self) -> str:
+        primer_apellido = self.apellido.split()[0] if self.apellido.split() else ""
+        return normalizar(f"{self.nombre} {primer_apellido}")
 
 
 # ───────────────────────────── lectura de la página ────────────────────
@@ -267,11 +319,21 @@ class Intento:
     estado: str  # confirmada | rechazada | no_confirmada | dry_run
     mensaje: str = ""
     evento: dict | None = None
+    pagina: "Pagina | None" = None   # la lectura más reciente, para el siguiente de la fila
 
 
 class Bot:
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, fuente=None, clave=None, ticket: int | None = None, ref: str = "main"):
         self.cfg = cfg
+        self.ticket = ticket          # número de ticket si esta es una corrida aislada
+        self.ref = ref
+        self.fuente = fuente          # solicitudes.GitHubIssues (o un falso en las pruebas)
+        self.clave = clave            # llave privada para descifrar solicitudes
+        self.personas: list[Persona] = []
+        self.sala_duenio = cfg.salas[0] if cfg.salas else ""   # tu sala favorita
+        self.hora_cambio_dia: datetime | None = None
+        self.invalidas: set[int] = set()
+        self.aviso_cupo: set[int] = set()
         self.sesion = requests.Session()
         self.sesion.headers.update({
             "User-Agent": f"Mozilla/5.0 (compatible; ReservaSalasUPB/{VERSION})",
@@ -301,6 +363,17 @@ class Bot:
     BANDA_ANTES = timedelta(minutes=60)
     BANDA_DESPUES = timedelta(minutes=60)
 
+    def apertura_de_hoy(self, ahora: datetime) -> datetime:
+        h, m = map(int, self.cfg.apertura_bo.split(":"))
+        return ahora.replace(hour=h, minute=m, second=0, microsecond=0)
+
+    def fin_por_reloj(self, ahora: datetime) -> datetime | None:
+        """Hora Bolivia a la que debe terminar esta ejecución (hoy), o None si no hay límite."""
+        if not self.cfg.hasta_bo:
+            return None
+        h, m = map(int, self.cfg.hasta_bo.split(":"))
+        return ahora.replace(hour=h, minute=m, second=0, microsecond=0)
+
     def proxima_apertura(self, ahora: datetime) -> datetime:
         h, m = map(int, self.cfg.apertura_bo.split(":"))
         hoy_apertura = ahora.replace(hour=h, minute=m, second=0, microsecond=0)
@@ -318,10 +391,10 @@ class Bot:
     def segundos_hasta_banda(self, ahora: datetime) -> float:
         return (self.proxima_apertura(ahora) - self.BANDA_ANTES - ahora).total_seconds()
 
-    def horario_ya_paso(self, hoy: date | None, ahora: datetime) -> bool:
+    def horario_ya_paso(self, hoy: date | None, ahora: datetime, horario: str | None = None) -> bool:
         if hoy is None or hoy != ahora.date():
             return False  # si el servidor ya está en el día siguiente, el horario es futuro
-        h, m = hora_fin(self.cfg.horario)
+        h, m = hora_fin(horario or self.cfg.horario)
         return ahora >= ahora.replace(hour=h, minute=m, second=0, microsecond=0) - timedelta(minutes=15)
 
     @staticmethod
@@ -334,61 +407,63 @@ class Bot:
         return min(techo, intervalo * 2 ** min(errores_seguidos, 5))
 
     # -- reserva --
-    def intentar(self, p: Pagina, sala: str) -> Intento:
+    def intentar(self, p: Pagina, sala: str, per: Persona) -> Intento:
         cfg = self.cfg
+        quien = "" if per.es_duenio else f"[{per.etiqueta}] "
         nombre_sala = p.salas.get(sala, f"sala {sala}")
         if cfg.dry_run:
-            log(f"[DRY-RUN] {nombre_sala} {cfg.horario} está libre: aquí enviaría la reserva.")
-            return Intento("dry_run")
+            log(f"{quien}[DRY-RUN] {nombre_sala} {per.horario} está libre: aquí enviaría la reserva.")
+            return Intento("dry_run", pagina=p)
 
-        log(f"¡{nombre_sala} {cfg.horario} libre! Enviando reserva…")
-        datos = {"room": sala, "first_name": cfg.nombre, "last_name": cfg.apellido,
-                 "code": cfg.codigo, "schedule": cfg.horario, "purpose": cfg.proposito}
+        log(f"{quien}¡{nombre_sala} {per.horario} libre! Enviando reserva…")
+        datos = {"room": sala, "first_name": per.nombre, "last_name": per.apellido,
+                 "code": per.codigo, "schedule": per.horario, "purpose": per.proposito}
         alertas: list[tuple[str, str]] = []
         fallo_red = False
         try:
             r = self.sesion.post(cfg.url, data=datos, timeout=30, headers={"Referer": cfg.url})
             alertas = leer_alertas(r.text)
-            log(f"Respuesta HTTP {r.status_code}. Mensajes del servidor: {alertas or 'ninguno'}")
+            log(f"{quien}Respuesta HTTP {r.status_code}. Mensajes del servidor: {alertas or 'ninguno'}")
         except requests.RequestException as e:
             fallo_red = True
-            log(f"La conexión falló durante el envío ({e.__class__.__name__}). Verifico igual por si entró.")
+            log(f"{quien}La conexión falló durante el envío ({e.__class__.__name__}). Verifico igual por si entró.")
 
         dijo_exito = any(t == "success" for t, _ in alertas)
         rechazo = next((msg for t, msg in alertas if t in ("danger", "warning")), "")
 
         # Verificación: la única fuente de verdad es el calendario del servidor.
-        # Más intentos que antes por si el servidor tarda en guardar cuando
-        # anda con tráfico alto (hora pico de reservas).
         intentos = 8 if (dijo_exito or fallo_red) else 3
+        ultima = p
         for k in range(intentos):
             if k:
                 cfg.dormir(cfg.pausa_verificacion)
             try:
                 q = self.obtener()
+                ultima = q
             except (requests.RequestException, PaginaInvalida) as e:
                 log(f"  verificación {k + 1}/{intentos}: no pude leer la página ({e})")
                 continue
-            ev = mi_reserva(q, cfg)
+            ev = mi_reserva(q, per)
             if ev:
                 log(f"  verificación {k + 1}/{intentos}: CONFIRMADA en el calendario → {ev.get('title')}")
-                return Intento("confirmada", evento=ev)
-            log(f"  verificación {k + 1}/{intentos}: todavía no aparece tu nombre en {cfg.horario}")
+                return Intento("confirmada", evento=ev, pagina=q)
+            log(f"  verificación {k + 1}/{intentos}: todavía no aparece el nombre en {per.horario}")
 
         if dijo_exito:
-            log("⚠️  El servidor mostró 'éxito' pero la reserva NO aparece en el calendario. "
+            log(f"{quien}⚠️  El servidor mostró 'éxito' pero la reserva NO aparece en el calendario. "
                 "NO se cuenta como reservada; sigo intentando.")
-            return Intento("no_confirmada", "éxito sin confirmar")
+            return Intento("no_confirmada", "éxito sin confirmar", pagina=ultima)
         if rechazo:
-            return Intento("rechazada", rechazo)
-        return Intento("no_confirmada", "sin respuesta clara del servidor")
+            return Intento("rechazada", rechazo, pagina=ultima)
+        return Intento("no_confirmada", "sin respuesta clara del servidor", pagina=ultima)
 
     # -- notificaciones / resumen --
-    def notificar(self, texto: str) -> None:
-        if not self.cfg.ntfy_topic:
+    def notificar(self, texto: str, topic: str | None = None) -> None:
+        topic = self.cfg.ntfy_topic if topic is None else topic
+        if not topic:
             return
         try:
-            requests.post(f"https://ntfy.sh/{self.cfg.ntfy_topic}", data=texto.encode("utf-8"),
+            requests.post(f"https://ntfy.sh/{topic}", data=texto.encode("utf-8"),
                           headers={"Title": "Reserva UPB"}, timeout=10)
         except requests.RequestException:
             pass
@@ -406,22 +481,208 @@ class Bot:
         self.escribir_resumen(titulo)
         return codigo
 
+    # -- tickets de otros estudiantes (cada uno en su PROPIA corrida) --
+    def auto_aprobacion_activa(self, ahora: datetime) -> bool:
+        if not self.cfg.auto_aprobar:
+            return False
+        h, m = map(int, self.cfg.auto_aprobar_bo.split(":"))
+        return ahora >= ahora.replace(hour=h, minute=m, second=0, microsecond=0)
+
+    def ticket_listo(self, iss, p: Pagina, ahora: datetime) -> bool:
+        """¿Toca lanzar ya la corrida aislada de este ticket?"""
+        if not iss.abierto or "rechazada" in iss.etiquetas or "en-curso" in iss.etiquetas:
+            return False
+        if "aprobada" not in iss.etiquetas and not self.auto_aprobacion_activa(ahora):
+            return False  # pendiente: espera tu aprobación o la auto-aprobación
+        if iss.fecha is None or p.hoy is None:
+            return True   # la corrida valida la fecha real (cifrada) y se cierra sola si no corresponde
+        if iss.fecha == p.hoy:
+            return True   # mismo día: buscar cancelaciones ahora
+        # día siguiente: lanzar desde las 15:30 BO para que la corrida cubra la apertura de las 20:00
+        return iss.fecha == p.hoy + timedelta(days=1) and ahora.hour * 60 + ahora.minute >= 15 * 60 + 30
+
+    def despachar_tickets(self, p: Pagina, ahora: datetime) -> None:
+        """Solo enruta números de ticket: NO descifra ni guarda datos de nadie."""
+        if not self.fuente or self.cfg.dry_run:
+            return
+        try:
+            tickets = sorted(self.fuente.listar(), key=lambda i: i.numero)
+        except Exception as e:
+            log(f"No pude leer los tickets ({e.__class__.__name__}); lo reintento luego.")
+            return
+        en_curso = sum(1 for t in tickets if "en-curso" in t.etiquetas)
+        cupo = self.cfg.max_personas - 1
+        for t in tickets:
+            if not self.ticket_listo(t, p, ahora):
+                continue
+            if en_curso >= cupo:
+                if t.numero not in self.aviso_cupo:
+                    self.aviso_cupo.add(t.numero)
+                    log(f"Ticket #{t.numero}: cupo lleno ({self.cfg.max_personas} personas por noche); queda en espera.")
+                continue
+            if self.fuente.despachar(t.numero, self.ref):
+                self.fuente.etiquetar(t.numero, ["en-curso"])
+                en_curso += 1
+                self.resumen.append(f"Ticket #{t.numero}: corrida aislada lanzada")
+                log(f"Ticket #{t.numero}: lancé su corrida aislada.")
+
+    def cerrar_ticket(self, per: Persona, etiqueta: str, texto: str) -> None:
+        """Comenta el resultado (sin datos personales), BORRA los datos cifrados y cierra."""
+        if self.fuente and per.issue and not self.cfg.dry_run:
+            self.fuente.comentar(per.issue, texto)
+            self.fuente.etiquetar(per.issue, [etiqueta])
+            self.fuente.quitar_etiqueta(per.issue, "en-curso")
+            self.fuente.borrar_datos(per.issue)
+            self.fuente.cerrar(per.issue)
+        per.cerrada = True
+
+    # compatibilidad con el nombre anterior
+    cerrar_solicitud = cerrar_ticket
+
+    def descartar_ticket(self, numero: int, motivo: str) -> None:
+        log(f"Ticket #{numero} descartado: {motivo}")
+        if self.fuente and not self.cfg.dry_run:
+            self.fuente.comentar(numero, f"❌ Solicitud descartada: {motivo}.")
+            self.fuente.etiquetar(numero, ["invalida"])
+            self.fuente.quitar_etiqueta(numero, "en-curso")
+            self.fuente.borrar_datos(numero)
+            self.fuente.cerrar(numero)
+
+    def preparar_ticket(self, p: Pagina) -> Persona | None:
+        """Corrida aislada: lee SOLO este ticket, lo descifra en memoria y arma a la persona."""
+        from solicitudes import SolicitudInvalida, descifrar, validar
+        n = self.ticket
+        try:
+            iss = self.fuente.obtener(n)
+        except Exception as e:
+            log(f"No pude leer el ticket #{n} ({e.__class__.__name__}).")
+            return None
+        if iss is None or not iss.abierto or "rechazada" in iss.etiquetas or MARCADOR_TICKET not in iss.cuerpo:
+            log(f"Ticket #{n}: ya no está activo (eliminado, cerrado o rechazado). Termino sin hacer nada.")
+            return None
+        try:
+            datos = validar(descifrar(iss.cuerpo, self.clave), p.salas, p.horarios)
+        except SolicitudInvalida as e:
+            self.descartar_ticket(n, str(e))
+            return None
+        if datos["codigo"] == self.cfg.codigo:
+            self.descartar_ticket(n, "usa el mismo código que la reserva principal")
+            return None
+        for v in (f"{datos['nombre']} {datos['apellido']}", datos["nombre"], datos["apellido"],
+                  datos["codigo"], datos["ntfy"]):
+            if v and len(v) >= 4:
+                print(f"::add-mask::{v}", flush=True)  # GitHub oculta estos datos en los logs públicos
+        log(f"Ticket #{n}: {datos['horario']} el {datos['fecha']}, salas {datos['salas']}")
+        return Persona(nombre=datos["nombre"], apellido=datos["apellido"], codigo=datos["codigo"],
+                       salas=datos["salas"], horario=datos["horario"], proposito=datos["proposito"],
+                       etiqueta=f"ticket #{n}", fecha=datos["fecha"], ntfy=datos["ntfy"], issue=n)
+
+    def registrar_hecha(self, per: Persona, ev: dict, p: Pagina) -> None:
+        per.hecha_en = p.hoy
+        sala = (ev.get("extendedProps") or {}).get("room", "")
+        if per.es_duenio:
+            linea = f"{p.hoy}: {ev.get('title')} {per.horario} ✅ confirmada en el calendario"
+            if linea not in self.resumen:
+                self.resumen.append(linea)
+            log(("RESERVA CONFIRMADA: " if per.reservada_aqui else "Ya tenías la reserva: ") + linea)
+            if per.reservada_aqui:
+                self.notificar(f"✅ Reservado y verificado: {ev.get('title')} {per.horario} ({p.hoy})")
+            return
+        texto = f"✅ Reservado y verificado: {sala} · {per.horario} · {p.hoy}"
+        self.resumen.append(f"{per.etiqueta}: {sala} {per.horario} ✅")
+        log(f"{per.etiqueta}: {'RESERVA CONFIRMADA' if per.reservada_aqui else 'ya tenía la reserva'} → {sala}")
+        self.notificar(texto, topic=per.ntfy)
+        self.notificar(f"✅ {per.etiqueta}: {sala} {per.horario} ({p.hoy})")
+        self.cerrar_solicitud(per, "reservada", texto)
+
+    def atender(self, per: Persona, p: Pagina, ahora: datetime) -> tuple[str, Pagina]:
+        """Devuelve (estado, página más reciente). estado: hecha | espera | vigila | dry | abortar | fuera."""
+        cfg = self.cfg
+        if per.cerrada:
+            return "fuera", p
+        if per.fecha and p.hoy and p.hoy > per.fecha:
+            self.cerrar_solicitud(per, "sin-sala", f"❌ No se consiguió sala para {per.fecha}.")
+            self.notificar(f"❌ No se consiguió sala para {per.fecha}.", topic=per.ntfy)
+            return "fuera", p
+        if per.fecha and p.hoy != per.fecha:
+            return "espera", p
+        ev = mi_reserva(p, per)
+        if ev:
+            if per.hecha_en != p.hoy:
+                self.registrar_hecha(per, ev, p)
+            return "hecha", p
+        if self.horario_ya_paso(p.hoy, ahora, per.horario):
+            return "espera", p
+        libres = [s for s in per.salas if sala_libre(p, s, per.horario)]
+        if not per.es_duenio and self.sala_duenio and self.hora_cambio_dia and \
+                (cfg.reloj() - self.hora_cambio_dia).total_seconds() < PRIORIDAD_DUENIO_SEG:
+            libres = [s for s in libres if s != self.sala_duenio]  # tu sala favorita es primero tuya
+        if not libres:
+            return "vigila", p
+        intento = self.intentar(p, libres[0], per)
+        q = intento.pagina or p
+        if intento.estado == "dry_run":
+            per.hecha_en = p.hoy
+            self.resumen.append(f"{p.hoy}: {per.etiqueta}: {p.salas[libres[0]]} {per.horario} libre "
+                                "(dry-run, no se envió)")
+            return "dry", q
+        if intento.estado == "confirmada":
+            per.reservada_aqui = True
+            if self.hora_cambio_dia:
+                reaccion = (cfg.reloj() - self.hora_cambio_dia).total_seconds()
+                self.resumen.append(f"⏱️ {per.etiqueta}: confirmada {reaccion:.1f} s después de detectar el cambio de día")
+            self.registrar_hecha(per, intento.evento, q)
+            return "hecha", q
+        if intento.estado == "rechazada":
+            if intento.mensaje == per.ultimo_rechazo:
+                per.rechazos_iguales += 1
+            else:
+                per.ultimo_rechazo, per.rechazos_iguales = intento.mensaje, 1
+            log(f"{per.etiqueta}: rechazada por el servidor ({per.rechazos_iguales}/{cfg.max_rechazos}): {intento.mensaje}")
+            if per.rechazos_iguales >= cfg.max_rechazos:
+                if per.es_duenio:
+                    self.resumen.append(f"Rechazo repetido: {intento.mensaje}")
+                    return "abortar", q
+                self.cerrar_solicitud(per, "rechazada-por-el-sitio",
+                                      f"❌ El sistema de reservas rechazó la solicitud varias veces: {intento.mensaje}")
+                return "fuera", q
+        return "vigila", q
+
     # -- bucle principal --
     def ejecutar(self) -> int:
         cfg = self.cfg
-        fin = time.monotonic() + cfg.max_segundos
+        ahora0 = cfg.reloj()
+        segundos = cfg.max_segundos
+        hasta = self.fin_por_reloj(ahora0)
+        if hasta is not None:
+            segundos = min(segundos, max(0.0, (hasta - ahora0).total_seconds()))
+        fin = time.monotonic() + segundos
         log(f"Bot v{VERSION} | {cfg.nombre} {cfg.apellido} ({cfg.codigo_oculto}) | horario {cfg.horario} | "
-            f"salas {cfg.salas} | {'DRY-RUN' if cfg.dry_run else 'real'} | máx {cfg.max_segundos / 60:.0f} min")
+            f"salas {cfg.salas} | {'DRY-RUN' if cfg.dry_run else 'real'} | arranqué {ahora0:%H:%M} BO, "
+            f"termino {(ahora0 + timedelta(seconds=segundos)):%H:%M} BO | "
+            + (f"corrida AISLADA del ticket #{self.ticket}" if self.ticket else
+               f"tickets {'activos' if self.fuente and self.clave else 'desactivados'}"))
+        duenio = Persona(nombre=cfg.nombre, apellido=cfg.apellido, codigo=cfg.codigo, salas=list(cfg.salas),
+                         horario=cfg.horario, proposito=cfg.proposito, etiqueta="tú", es_duenio=True)
+        # En una corrida de ticket la única persona es la del ticket (se arma tras leer la página).
+        self.personas = [] if self.ticket else [duenio]
+        tarde = (not cfg.dry_run) and bool(cfg.hasta_bo) and not self.ticket \
+            and ahora0 > self.apertura_de_hoy(ahora0) + timedelta(minutes=2)
+        aviso_tarde_hecho = False
+        latido_hecho = False
+        self.hora_cambio_dia = None
+        proxima_recarga = 0.0
+        auto_antes = self.auto_aprobacion_activa(ahora0)
 
         lecturas_ok = 0
         errores_seguidos = 0
         validado = False
-        reservada_aqui = False
         ultimo_hoy: date | None = None
-        ultimo_rechazo, rechazos_iguales = "", 0
         consultas = 0
 
-        while time.monotonic() < fin:
+        while True:
+            if consultas and time.monotonic() >= fin:
+                break
             consultas += 1
             ahora = cfg.reloj()
             try:
@@ -435,6 +696,15 @@ class Bot:
                 cfg.dormir(espera)
                 continue
 
+            if not validado and self.ticket:
+                persona_ticket = self.preparar_ticket(p)
+                if persona_ticket is None:
+                    return self.terminar(EXIT_OK, f"Ticket #{self.ticket}: nada que hacer.")
+                self.personas = [persona_ticket]
+                duenio = persona_ticket  # la "principal" de esta corrida
+                self.notificar(f"🟢 Tu solicitud está activa: el bot vigila {persona_ticket.horario} "
+                               f"para el {persona_ticket.fecha}.", topic=persona_ticket.ntfy)
+                validado = True
             if not validado:
                 desconocidas = [s for s in cfg.salas if s not in p.salas]
                 if desconocidas:
@@ -444,54 +714,72 @@ class Bot:
                 log("Salas objetivo: " + ", ".join(f"{s}={p.salas[s]}" for s in cfg.salas))
                 validado = True
 
+            if ultimo_hoy is not None and p.hoy != ultimo_hoy:
+                self.hora_cambio_dia = cfg.reloj()
+                linea = f"📅 El servidor cambió a {p.hoy} a las {self.hora_cambio_dia:%H:%M:%S} BO"
+                self.resumen.append(linea)
+                log(linea)
             if p.hoy != ultimo_hoy:
                 log(f"Fecha del servidor: {p.hoy}")
                 ultimo_hoy = p.hoy
-                ultimo_rechazo, rechazos_iguales = "", 0
 
-            ev = mi_reserva(p, cfg)
-            sin_nada_que_hacer = False
+            # Tickets: tu corrida solo LANZA la corrida aislada de cada ticket listo (cada 5 min y
+            # al cruzar la hora de auto-aprobación). Nunca dentro del núcleo de la apertura.
+            auto_ahora = self.auto_aprobacion_activa(ahora)
+            if self.fuente and not self.ticket and not self.en_nucleo_apertura(ahora) and \
+                    (time.monotonic() >= proxima_recarga or auto_ahora != auto_antes):
+                self.despachar_tickets(p, ahora)
+                proxima_recarga = time.monotonic() + 300
+                auto_antes = auto_ahora
 
-            if ev:
-                sin_nada_que_hacer = True
-                linea = f"{p.hoy}: {ev.get('title')} {cfg.horario} ✅ confirmada en el calendario"
-                if linea not in self.resumen:
-                    self.resumen.append(linea)
-                    log(("RESERVA CONFIRMADA: " if reservada_aqui else "Ya tenías la reserva: ") + linea)
-            elif self.horario_ya_paso(p.hoy, ahora):
-                sin_nada_que_hacer = True
-                if consultas == 1:
-                    log(f"El horario {cfg.horario} de hoy ya pasó; espero la apertura del día siguiente.")
-            else:
-                libres = [s for s in cfg.salas if sala_libre(p, s, cfg.horario)]
-                if libres:
-                    intento = self.intentar(p, libres[0])
-                    if intento.estado == "dry_run":
-                        self.resumen.append(f"{p.hoy}: {p.salas[libres[0]]} {cfg.horario} libre (dry-run, no se envió)")
-                        return self.terminar(EXIT_OK, "Dry-run terminado: el bot habría reservado.")
-                    if intento.estado == "confirmada":
-                        reservada_aqui = True
-                        self.notificar(f"✅ Reservado y verificado: {intento.evento.get('title')} {cfg.horario} ({p.hoy})")
-                        continue  # la siguiente vuelta lo registra y decide si termina
-                    if intento.estado == "rechazada":
-                        if intento.mensaje == ultimo_rechazo:
-                            rechazos_iguales += 1
-                        else:
-                            ultimo_rechazo, rechazos_iguales = intento.mensaje, 1
-                        log(f"Rechazada por el servidor ({rechazos_iguales}/{cfg.max_rechazos}): {intento.mensaje}")
-                        if rechazos_iguales >= cfg.max_rechazos:
-                            self.resumen.append(f"Rechazo repetido: {intento.mensaje}")
-                            return self.terminar(EXIT_RECHAZOS, "El servidor rechazó la reserva varias veces "
-                                                 "con el mismo mensaje. Revísalo a mano.", "error")
-                elif consultas == 1 or consultas % 50 == 0:
-                    log(f"{cfg.horario} ocupado en todas las salas objetivo. Vigilando… (consulta {consultas})")
+            ev = mi_reserva(p, duenio)
+
+            # Arranque tardío: GitHub puede retrasar mucho los cron.
+            if tarde and not ev and not aviso_tarde_hecho:
+                aviso_tarde_hecho = True
+                msg = (f"⚠️ El bot arrancó tarde ({ahora0:%H:%M} BO), después de la apertura de las "
+                       f"{cfg.apertura_bo}. Reserva a mano si puedes; igual sigo intentando.")
+                self.resumen.append(msg)
+                print(f"::warning::{msg}", flush=True)
+                self.notificar(msg)
+                if time.monotonic() >= fin:  # ya pasó también la hora de fin
+                    return self.terminar(EXIT_TARDE, msg, "error")
+            if ev and time.monotonic() >= fin:
+                return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)")
+
+            # Latido: confirma al celular que el bot está vivo antes de la apertura.
+            if not latido_hecho and not ev and self.en_banda_apertura(ahora) and not cfg.dry_run:
+                latido_hecho = True
+                if not self.ticket:
+                    self.notificar(f"🟢 Bot vigilando: salas {', '.join(p.salas.get(s, s) for s in cfg.salas)} "
+                                   f"· {cfg.horario}")
+
+            # Atender a todos con la MISMA lectura (no se multiplica la carga al sitio).
+            estados = []
+            for per in [x for x in self.personas if not x.cerrada]:
+                estado, p = self.atender(per, p, ahora)
+                estados.append(estado)
+                if estado == "abortar":
+                    return self.terminar(EXIT_RECHAZOS, "El servidor rechazó la reserva varias veces "
+                                         "con el mismo mensaje. Revísalo a mano.", "error")
+            if "dry" in estados:
+                return self.terminar(EXIT_OK, "Dry-run terminado: el bot habría reservado.")
+            if "vigila" in estados and (consultas == 1 or consultas % 50 == 0):
+                log(f"Horarios ocupados en las salas objetivo. Vigilando… (consulta {consultas})")
+            if not self.personas or all(x.cerrada for x in self.personas):
+                return self.terminar(EXIT_OK, f"Ticket #{self.ticket} terminado." if self.ticket
+                                     else "Nada más que hacer.")
+            if duenio.hecha_en is None and estados and estados[0] == "espera" and consultas == 1 \
+                    and self.horario_ya_paso(p.hoy, ahora, duenio.horario):
+                log(f"El horario {cfg.horario} de hoy ya pasó; espero la apertura del día siguiente.")
+            sin_nada_que_hacer = "vigila" not in estados
 
             # ¿Cuánto esperar? Tres niveles: núcleo (rafaga) > banda (medio) > normal.
             if sin_nada_que_hacer:
                 hasta_banda = self.segundos_hasta_banda(ahora)
                 if not self.en_banda_apertura(ahora) and time.monotonic() + hasta_banda > fin:
-                    if ev:
-                        return self.terminar(EXIT_OK, "Reserva confirmada ✅" if reservada_aqui
+                    if duenio.hecha_en == p.hoy:
+                        return self.terminar(EXIT_OK, "Reserva confirmada ✅" if duenio.reservada_aqui
                                              else "Ya tenías la reserva ✅ (no hice nada)")
                     return self.terminar(EXIT_OK, "Horario de hoy ya pasó y la próxima apertura cae fuera de esta ejecución.")
                 if self.en_nucleo_apertura(ahora):
@@ -499,7 +787,10 @@ class Bot:
                 elif self.en_banda_apertura(ahora):
                     espera = cfg.intervalo_medio
                 else:
-                    espera = min(cfg.intervalo_espera, max(1.0, hasta_banda))
+                    lejos = 300.0 if hasta_banda > 15 * 60 else cfg.intervalo_espera
+                    espera = min(lejos, max(1.0, hasta_banda))
+                    if self.fuente:  # que la recarga de solicitudes no espere de más
+                        espera = min(espera, max(1.0, proxima_recarga - time.monotonic()))
             elif self.en_nucleo_apertura(ahora):
                 espera = cfg.intervalo_rafaga
             elif self.en_banda_apertura(ahora):
@@ -510,10 +801,42 @@ class Bot:
 
         if lecturas_ok == 0:
             return self.terminar(EXIT_SITIO, "No pude leer la página en toda la ejecución.", "error")
-        if reservada_aqui:
+        # Cierre de la noche para las solicitudes que no lograron sala.
+        if latido_hecho or aviso_tarde_hecho or self.ticket:
+            for per in self.personas:
+                if not per.es_duenio and not per.cerrada and per.hecha_en is None and per.fecha == ultimo_hoy \
+                        and (latido_hecho or self.horario_ya_paso(ultimo_hoy, cfg.reloj(), per.horario)
+                             or self.fin_por_reloj(ahora0) is not None):
+                    self.resumen.append(f"{per.etiqueta}: sin sala ❌")
+                    self.notificar(f"❌ No se consiguió sala para {per.fecha}.", topic=per.ntfy)
+                    self.cerrar_solicitud(per, "sin-sala", f"❌ No se consiguió sala para {per.fecha}.")
+        if self.ticket:
+            return self.terminar(EXIT_OK, f"Ticket #{self.ticket}: " + (
+                "reserva confirmada ✅" if duenio.reservada_aqui else "terminado sin sala."))
+        if duenio.reservada_aqui:
             return self.terminar(EXIT_OK, "Reserva confirmada ✅")
+        if duenio.hecha_en is not None and duenio.hecha_en == ultimo_hoy:
+            return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)")
         self.resumen.append(f"{ultimo_hoy}: {cfg.horario} no se liberó durante esta ejecución")
+        if latido_hecho or aviso_tarde_hecho:
+            self.notificar(f"❌ Terminé sin conseguir sala para {ultimo_hoy} {cfg.horario}. Revisa a mano.")
         return self.terminar(EXIT_OK, "Tiempo agotado: no se liberó la sala (no se reservó nada).", "warning")
+
+
+def fuente_desde_entorno():  # noqa: C901
+    """Activa las solicitudes de terceros si están todos los datos; si no, el bot sigue solo contigo."""
+    if os.getenv("UPB_SOLICITUDES", "1").strip().lower() in ("0", "false", "no"):
+        return None, None
+    token, repo, priv = (os.getenv(v, "").strip() for v in ("UPB_GH_TOKEN", "UPB_REPO", "UPB_CLAVE_PRIVADA"))
+    if not (token and repo and priv):
+        log("Solicitudes de otros: desactivadas (falta UPB_CLAVE_PRIVADA; créala desde la Guía del panel).")
+        return None, None
+    try:
+        import solicitudes
+        return solicitudes.GitHubIssues(repo, token, log=log), solicitudes.cargar_clave_privada(priv)
+    except Exception as e:
+        print(f"::warning::No pude activar las solicitudes ({e.__class__.__name__}). Sigo solo con tu reserva.")
+        return None, None
 
 
 def main() -> int:
@@ -522,7 +845,21 @@ def main() -> int:
     except ValueError as e:
         print(f"::error::{e}", flush=True)
         return EXIT_CONFIG
-    return Bot(cfg).ejecutar()
+    fuente, clave = fuente_desde_entorno()
+    ticket = os.getenv("UPB_TICKET", "").strip()
+    if ticket:
+        if not ticket.isdigit():
+            print("::error::UPB_TICKET debe ser un número de ticket", flush=True)
+            return EXIT_CONFIG
+        if not (fuente and clave):
+            print("::error::Corrida de ticket sin UPB_CLAVE_PRIVADA: no puedo leer la solicitud.", flush=True)
+            return EXIT_CONFIG
+        for k, v in RITMO_TICKET.items():  # constantes de código, no configurables
+            setattr(cfg, k, v)
+    bot = Bot(cfg, fuente=fuente, clave=clave, ticket=int(ticket) if ticket else None,
+              ref=os.getenv("GITHUB_REF_NAME", "main") or "main")
+    bot.sala_duenio = (os.getenv("UPB_SALA_DUENIO", "") or (cfg.salas[0] if cfg.salas else "")).strip()
+    return bot.ejecutar()
 
 
 if __name__ == "__main__":

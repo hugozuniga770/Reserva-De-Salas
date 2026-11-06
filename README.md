@@ -1,107 +1,84 @@
-# Reserva de Salas UPB — bot v2
+# Bot de Reserva de Salas UPB
 
-Bot que vigila el sistema de reservas de salas de la UPB Santa Cruz
-(`atari.scz.upb.edu`) y reserva automáticamente un horario cuando se libera,
-**verificando siempre en el calendario del servidor que la reserva quedó a tu
-nombre** antes de darla por hecha.
+| Campo | Valor |
+| :-- | :-- |
+| Proyecto | Reserva automática de salas de estudio, UPB sede Santa Cruz |
+| Responsable | Hugo Rafael Zúñiga Daza |
+| Versión | 3.0 |
+| Fecha | 05/11/2026 |
+| Estado | En pruebas: verificado contra entornos simulados; falta la verificación en el sistema real (ver §7) |
+| Panel | `https://hugozuniga770.github.io/Reserva-De-Salas/` |
 
-## Por qué la v1 daba falsos positivos
+> Proyecto estudiantil. **No es un sistema oficial de la UPB.** Redactado con asistencia de Claude (Anthropic).
 
-La versión con Selenium imprimía «✅ Reserva asegurada» apenas hacía clic en
-*Confirmar*, sin mirar qué respondía el servidor:
+## 1. Qué hace
 
-1. **No verificaba nada.** Si el servidor rechazaba (otro estudiante llegó
-   primero, validación, error) el bot igual decía éxito.
-2. **Cerraba el navegador justo después del clic** (`return True` → `driver.quit()`),
-   así que el POST podía cortarse antes de llegar al servidor.
-3. **Validación HTML5 silenciosa.** Si el clic en el horario no se registraba, el
-   navegador bloqueaba el envío por los campos `required` y no pasaba nada… pero
-   el bot reportaba éxito.
-4. `except Exception: pass` escondía todos los errores.
-5. El workflow tenía `cancel-in-progress: true`: una ejecución nueva podía matar a
-   la anterior en plena reserva.
+- **Tu reserva diaria.** Cada tarde arranca solo y espera la apertura del día siguiente (20:00 hora Bolivia). Reserva tu sala de estudio preferida (F → D → B → C) en tu horario y **solo la da por hecha cuando la ve en el calendario del servidor**.
+- **Solicitudes de compañeros.** Piden sala desde una página pública, eligiendo días en un calendario. Sus datos viajan cifrados, cada solicitud se atiende en **su propia corrida aislada** y los datos se borran después de usarse.
+- **Control desde el celular.** Un panel con el estilo de UPBnet permite correr, probar, detener, configurar, aprobar solicitudes y ver el estado.
 
-## Qué hace la v2
+## 2. Arquitectura en una mirada
 
-- Lee la disponibilidad real (`const occupied`) y el calendario (`events`) del HTML.
-- Envía el formulario por HTTP (sin navegador): más rápido y menos frágil.
-- **Verifica** releyendo la página y buscando tu nombre en ese horario. Si no
-  aparece, *no cuenta*, aunque el servidor haya mostrado «éxito».
-- Si la conexión se corta al enviar, verifica igual antes de reintentar (no duplica).
-- Si ya tienes la reserva, no hace nada y termina en segundos.
-- Salas de respaldo en orden de preferencia, **todas "de estudio"**. Por
-  defecto `8,6,15,3` (Sala F → D → B → C); cambialo con la variable
-  `UPB_SALAS`. F es siempre la primera que intenta.
-- No intenta horarios que ya pasaron.
-- Sabe que el servidor pasa al día siguiente alrededor de las **20:00 hora
-  Bolivia** (00:00 UTC), pero como a veces el servidor anda lento o
-  inestable esa hora, vigila en tres niveles:
-  - **19:00–21:00 BO** (la ventana que pediste): sondeo cada 1 s.
-  - **19:45–20:15 BO** (núcleo, por si abre a las 19:59 o a las 20:00):
-    cada 0,25 s (~4/seg).
-  - El resto del día: cada 2 s, buscando por si alguien cancela.
-- **Si el servidor tarda en responder, no se queda colgado esperándolo.**
-  Corta la conexión a los 25-30 s y reintenta enseguida — así, si el
-  servidor está lento, lo sigue consultando en vez de quedarse frízado media
-  hora en una sola petición muerta. Si falla varias veces seguidas, espera
-  un poco más entre reintento y reintento (hasta 8 s dentro de la ventana
-  19:00–21:00, hasta 60 s fuera de ella) para no insistirle de más a un
-  servidor caído.
-- **A propósito no manda cientos ni miles de peticiones por segundo.** El
-  servidor solo acepta una reserva por horario, así que mandar duplicados no
-  mejora tus chances, sólo le pone carga a un servidor que comparte toda la
-  UPB — y es el tipo de patrón que un firewall universitario o las políticas
-  de uso de GitHub Actions leen como un ataque, con riesgo real de que te
-  bloqueen la IP o te suspendan el workflow. 0,25 s ya es 15-20× más rápido
-  que un clic humano. Estos valores están fijos en el código, no como
-  variable de entorno, para que nadie los baje sin querer.
-- Un detalle honesto: ningún bot puede prometer al 100% que nadie más
-  reserve la F un instante antes (depende también de qué tan rápido
-  reaccionen otros). Lo que sí asegura: siempre la intenta primero, siempre
-  reacciona en una fracción de segundo sin que se le pase nada, y si por un
-  pelo se le adelantan, cae automático a D, después B, después C.
-- Si el servidor rechaza 5 veces seguidas con el mismo mensaje, se detiene y marca
-  error (GitHub te manda un correo).
-- Datos personales en **GitHub Secrets**, no en el código.
-- Resumen claro en cada ejecución de Actions y notificación opcional al celular (ntfy).
-- 28 pruebas automáticas: el falso positivo, el cambio de día, el orden de
-  salas F→D→B→C de punta a punta (solo salas de estudio), los tres niveles
-  de ritmo, y que nunca quede configurado como un flood.
+```
+Celular (panel, GitHub Pages) ──API──► GitHub Actions ──formulario──► Sistema de reservas UPB
+Compañeros (#pedir) ──issue cifrado──► GitHub Issues ◄── la corrida aislada de cada ticket
+                                                    └──► avisos ntfy
+```
 
-## Configuración
+Detalle, diagramas y decisiones: [03 · Arquitectura](documentacion/03-arquitectura.md).
 
-1. **Settings → Secrets and variables → Actions → Secrets**:
-   - `UPB_NOMBRE` = `Nombre Ejemplo`
-   - `UPB_APELLIDO` = `Apellido Ejemplo`
-   - `UPB_CODIGO` = tu código
-   - `NTFY_TOPIC` *(opcional)* = un nombre largo y raro, p. ej. `ejemplo-salas-upb-x7k2q`;
-     instala la app **ntfy** y suscríbete a ese tema para recibir el aviso.
-2. **Variables** (opcional): `UPB_SALAS` (def. `8`) y `UPB_HORARIO` (def. `12:15-14:15`).
-3. Para probar: **Actions → Reserva Sala UPB → Run workflow** con *dry_run* marcado.
+## 3. Estructura del repositorio
 
-## Probar en local
+| Ruta | Contenido |
+| :-- | :-- |
+| `reserva_bot.py` | Bot: lectura, reserva, verificación, avisos y despacho de tickets |
+| `solicitudes.py` | Tickets: cifrado, validación y operaciones en issues |
+| `docs/` | Panel web (GitHub Pages): `index.html`, `cifrado.js` y `clave_publica.txt` (la crea el panel) |
+| `.github/workflows/reservar.yml` | Horarios, carriles de concurrencia y permisos |
+| `.github/workflows/tests.yml` | pytest + prueba del panel en Chromium |
+| `tests/` | 60 casos de pytest y la prueba de punta a punta del panel |
+| `documentacion/` | Documentación del proyecto (01 a 09) |
+| `formulario.md` | Diccionario del formulario de la UPB (campos, IDs de salas y horarios) |
+| `Pagina UPB/` | HTML real guardado, usado por las pruebas |
+
+## 4. Puesta en marcha
+
+1. **Secrets** (Settings → Secrets and variables → Actions): `UPB_CODIGO`, `UPB_NOMBRE`, `UPB_APELLIDO` y, opcional, `NTFY_TOPIC`.
+2. **GitHub Pages**: Settings → Pages → rama `main`, carpeta `/docs`.
+3. **Panel**: abre el enlace → *Administrar* → pega tu fine-grained token (permisos: Actions, Variables, Issues y Contents en lectura y escritura; solo este repositorio).
+4. Sigue la **Guía de instalación** del panel. Ahí se crea la llave de cifrado (`UPB_CLAVE_PRIVADA`), se comprueban los permisos y se hace la prueba final.
+5. Recomendado: cron-job.org para un arranque puntual (paso 5 de la guía).
+
+Manual completo: [06 · Manual de usuario](documentacion/06-manual-de-usuario.md).
+
+## 5. Pruebas
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest -q
-
-# dry-run contra el sitio real
-UPB_NOMBRE="Nombre Ejemplo" UPB_APELLIDO="Apellido Ejemplo" UPB_CODIGO="xxxxx" \
-UPB_DRY_RUN=1 UPB_MAX_MINUTOS=1 python reserva_bot.py
+python -m pytest -q                         # 60 casos
+pip install playwright && python -m playwright install chromium
+python tests/panel_e2e.py capturas          # panel en Chromium: 6 verificaciones
 ```
 
-## Códigos de salida
+Matriz requisito ↔ prueba: [07 · Pruebas y trazabilidad](documentacion/07-pruebas-y-trazabilidad.md).
 
-| Código | Significado |
-| :----: | :---------- |
-| 0 | Reservado y verificado / ya la tenías / no se liberó / dry-run |
-| 1 | Configuración inválida (faltan secrets, sala u horario inexistente) |
-| 2 | El servidor rechazó varias veces seguidas — revisar a mano |
-| 3 | No se pudo leer la página en toda la ejecución |
+## 6. Documentación
 
-## Límites
+| N.º | Documento |
+| :--: | :-- |
+| 01 | [Visión y alcance](documentacion/01-vision-y-alcance.md) |
+| 02 | [Requisitos](documentacion/02-requisitos.md) |
+| 03 | [Arquitectura y decisiones](documentacion/03-arquitectura.md) |
+| 04 | [Seguridad y privacidad](documentacion/04-seguridad-y-privacidad.md) |
+| 05 | [Manual de operación](documentacion/05-operacion.md) |
+| 06 | [Manual de usuario](documentacion/06-manual-de-usuario.md) |
+| 07 | [Pruebas y trazabilidad](documentacion/07-pruebas-y-trazabilidad.md) |
+| 08 | [Registro de cambios](documentacion/08-registro-de-cambios.md) |
+| 09 | [Glosario](documentacion/09-glosario.md) |
 
-El bot no puede reservar una sala que otra persona ya tiene: lo que garantiza es
-que **nunca te dirá que reservó si no es verdad**, y que estará atento cuando se
-libere o cuando abra el día siguiente. GitHub desactiva los workflows programados
-tras 60 días sin actividad en el repo; haz un commit de vez en cuando.
+## 7. Limitaciones declaradas
+
+- Ningún bot garantiza la sala si otra persona la reserva antes. Este maximiza las probabilidades y nunca miente sobre el resultado.
+- **[SUPUESTO]** La apertura es a las 20:00 BO. Cada noche el bot registra la hora real.
+- **[PROVISIONAL]** Todo se probó contra simulaciones del sistema de la UPB y de la API de GitHub. Las verificaciones en el entorno real están listadas en el documento 07, §3.
+- El ritmo de consultas está acotado a propósito (máximo ~4 por segundo, solo en la ventana crítica) para no saturar el sistema de la UPB.

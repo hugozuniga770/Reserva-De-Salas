@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#333333">
+<title>Reserva de Salas — UPBnet</title>
+<link rel="icon" href="https://sistemas.upb.edu/img/ico/favicon.ico">
+<script>
+  // Logo: copia local → logo oficial de UPBnet → texto. Definido antes del <img> para no perder el error.
+  window.logoFallo = function (img) {
+    if (!img.dataset.paso) { img.dataset.paso = "1"; img.src = "https://sistemas.upb.edu/img/logo-upbnet-01.png"; return; }
+    img.style.display = "none"; var t = document.getElementById("logo-texto"); if (t) t.classList.remove("oculto");
+  };
+</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@300;400;600;700&display=swap" media="print" onload="this.media='all'">
+<style>
+/* Estilo UPBnet (AdminLTE, tema skin-black), adaptado al celular. */
+:root{
+  --logo:#333;--lado:#333;--lado-borde:#444;--lado-activo:#444;--lado-texto:#eee;
+  --fondo:#f9f9f9;--caja:#fff;--texto:#333;--suave:#777;--linea:#f4f4f4;--borde:#ddd;
+  --azul:#3c8dbc;--aqua:#00c0ef;--verde:#00a65a;--amarillo:#f39c12;--rojo:#f56954;--gris:#999;--morado:#605ca8;
+  --t-ok:#3c763d;--f-ok:#dff0d8;--t-info:#31708f;--f-info:#d9edf7;--t-av:#8a6d3b;--f-av:#fcf8e3;--t-mal:#a94442;--f-mal:#f2dede;
+  --titulos:"Source Sans Pro","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --cuerpo:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--fondo:#1d1f22;--caja:#26292d;--texto:#e6e6e6;--suave:#a5a5a5;--linea:#33373c;--borde:#3d4247;
+    --t-ok:#b9e3b5;--f-ok:#1f3a24;--t-info:#b7dcf0;--f-info:#173246;--t-av:#f3dfa8;--f-av:#3b3214;--t-mal:#f3b9b7;--f-mal:#432222;color-scheme:dark}
+}
+:root[data-theme="dark"]{--fondo:#1d1f22;--caja:#26292d;--texto:#e6e6e6;--suave:#a5a5a5;--linea:#33373c;--borde:#3d4247;
+  --t-ok:#b9e3b5;--f-ok:#1f3a24;--t-info:#b7dcf0;--f-info:#173246;--t-av:#f3dfa8;--f-av:#3b3214;--t-mal:#f3b9b7;--f-mal:#432222;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:calc(50px + env(safe-area-inset-top,0px))}
+body{margin:0;font:14px/1.42857 var(--cuerpo);color:var(--texto);background:var(--fondo);-webkit-text-size-adjust:100%}
+h1,h2,h3,h4{font-family:var(--titulos);font-weight:500;line-height:1.1;margin:0}
+a{color:var(--azul)}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
+.oculto{display:none!important}
+
+/* Cabecera: logo oscuro + barra blanca */
+.cabecera{position:fixed;inset:0 0 auto;z-index:30;display:flex;height:calc(50px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px);background:#fff;border-bottom:1px solid #eee}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--logo);z-index:31}
+.logo{flex:0 0 220px;display:flex;align-items:center;justify-content:center;background:var(--logo);color:#f9f9f9;text-decoration:none;padding:0 10px}
+.logo img{max-height:34px;max-width:180px;display:block}
+.logo .marca{font:italic 600 22px/1 var(--titulos);letter-spacing:.5px}
+.barra{flex:1;display:flex;align-items:center;justify-content:space-between;color:#333}
+.hamburguesa{width:48px;height:48px;border:0;background:transparent;display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}
+.hamburguesa span{display:block;width:22px;height:2px;border-radius:4px;background:#333}
+.usuario{font-weight:700;margin-right:15px;display:flex;align-items:center;gap:6px;color:#333}
+
+/* Lateral oscuro */
+.lateral{position:fixed;z-index:25;top:calc(50px + env(safe-area-inset-top,0px));bottom:0;left:0;width:220px;background:var(--lado);overflow-y:auto;border-bottom:1px solid #333;transition:transform .2s ease}
+.panel-usuario{display:flex;gap:10px;align-items:center;padding:12px 10px;color:var(--lado-texto)}
+.avatar{width:45px;height:45px;border-radius:50%;border:1px solid #444;background:#555;display:grid;place-items:center;font:600 18px var(--titulos);color:#fff}
+.panel-usuario b{display:block;font-size:14px;margin-bottom:6px}
+.panel-usuario small{font-size:11px;display:flex;align-items:center;gap:4px}
+.punto{width:8px;height:8px;border-radius:50%;background:var(--verde);display:inline-block}
+.menu{list-style:none;margin:0;padding:0}
+.menu li{border-top:1px solid #333}
+.menu li:first-child{border-top-color:#444}
+.menu a{display:flex;align-items:center;gap:10px;padding:12px 5px 12px 15px;color:var(--lado-texto);text-decoration:none;margin-right:1px}
+.menu a:hover,.menu a.activo{background:var(--lado-activo);color:#f6f6f6}
+.menu svg{width:16px;height:16px;flex:none;opacity:.9}
+.menu .seccion{color:#999;font-size:11px;padding:14px 15px 6px;border-top:1px solid #444}
+.menu .insignia{margin-left:auto;margin-right:10px}
+.velo{display:none}
+
+/* Contenido */
+.derecha{margin-left:220px;padding-top:calc(50px + env(safe-area-inset-top,0px));padding-bottom:calc(30px + env(safe-area-inset-bottom,0px));min-height:100vh}
+.encabezado{padding:15px 15px 10px 20px;position:relative}
+.encabezado h1{font-size:24px}
+.encabezado h1 small{font-size:15px;font-weight:300;padding-left:4px;color:var(--suave)}
+.migas{position:absolute;top:15px;right:10px;font-size:12px;padding:7px 5px;color:var(--suave);margin:0;list-style:none;display:flex;gap:5px}
+.migas li+li::before{content:"> "}
+.contenido{padding:0 15px 15px;max-width:1100px}
+.fila{display:grid;gap:15px}
+@media (min-width:700px){.fila.dos{grid-template-columns:1fr 1fr}.fila.cuatro{grid-template-columns:repeat(4,1fr)}}
+.fila.cuatro{grid-template-columns:1fr 1fr}
+
+/* small-box */
+.cuadro{position:relative;display:block;border-radius:2px;color:#f9f9f9;overflow:hidden;text-decoration:none;min-height:110px}
+.cuadro .dentro{padding:10px;position:relative;z-index:1}
+.cuadro h3{font:700 26px/1.1 var(--titulos);margin:6px 0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cuadro p{margin:0;font-size:14px}
+.cuadro .icono{position:absolute;right:6px;bottom:22px;width:64px;height:64px;color:rgba(0,0,0,.15)}
+.cuadro .pie{display:block;position:relative;z-index:1;text-align:center;padding:3px 0;background:rgba(0,0,0,.1);color:rgba(255,255,255,.85);font-size:13px;border:0;width:100%;cursor:pointer}
+.cuadro .pie:hover{background:rgba(0,0,0,.15);color:#fff}
+.bg-aqua{background:var(--aqua)}.bg-verde{background:var(--verde)}.bg-amarillo{background:var(--amarillo)}.bg-rojo{background:var(--rojo)}.bg-gris{background:#777}.bg-morado{background:var(--morado)}.bg-azul{background:var(--azul)}
+
+/* box */
+.caja{position:relative;background:var(--caja);border-top:2px solid #c1c1c1;margin-bottom:20px;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.caja.primary{border-top-color:var(--azul)}.caja.info{border-top-color:var(--aqua)}.caja.danger{border-top-color:var(--rojo)}.caja.warning{border-top-color:var(--amarillo)}.caja.success{border-top-color:var(--verde)}
+.caja-cab{display:flex;align-items:center;gap:8px;padding:10px 10px 6px;color:var(--texto)}
+.caja-cab h3{font-size:18px}
+.caja-cab>svg{width:18px;height:18px;flex:none;color:var(--suave)}
+.caja-cab .der{margin-left:auto;display:flex;gap:6px}
+.caja-cuerpo{padding:10px}
+.caja-pie{border-top:1px solid var(--linea);padding:10px;display:flex;flex-wrap:wrap;gap:8px}
+.paso{display:inline-grid;place-items:center;min-width:24px;height:24px;border-radius:50%;background:var(--azul);color:#fff;font:600 13px var(--titulos)}
+
+/* botones planos */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;min-height:40px;border:1px solid transparent;border-radius:0;cursor:pointer;font-size:14px;text-decoration:none;white-space:nowrap;line-height:1.2}
+.btn svg{width:15px;height:15px}
+.btn-primary{background:var(--azul);border-color:#367fa9;color:#fff}.btn-primary:hover{background:#367fa9}
+.btn-success{background:var(--verde);border-color:#008d4c;color:#fff}.btn-success:hover{background:#008d4c}
+.btn-danger{background:var(--rojo);border-color:#f4543c;color:#fff}.btn-danger:hover{background:#f4543c}
+.btn-warning{background:var(--amarillo);border-color:#e08e0b;color:#fff}
+.btn-default{background:#f4f4f4;border-color:#ddd;color:#444}.btn-default:hover{background:#e7e7e7}
+.btn-block{display:flex;width:100%}
+.btn-lg{min-height:48px;font-size:16px}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.btn-sm{min-height:32px;padding:5px 10px;font-size:13px}
+
+/* alertas, callouts, etiquetas */
+.alerta{padding:12px 15px;border:1px solid transparent;border-radius:4px;margin-bottom:15px;display:flex;gap:10px;align-items:flex-start}
+.alerta svg{width:16px;height:16px;flex:none;margin-top:2px}
+.alerta-ok{color:var(--t-ok);background:var(--f-ok);border-color:#d6e9c6}
+.alerta-info{color:var(--t-info);background:var(--f-info);border-color:#bce8f1}
+.alerta-av{color:var(--t-av);background:var(--f-av);border-color:#faebcc}
+.alerta-mal{color:var(--t-mal);background:var(--f-mal);border-color:#ebccd1}
+.callout{margin:0 0 15px;padding:12px 15px;border-left:5px solid #eee;background:var(--caja)}
+.callout.danger{background:var(--f-mal);border-color:#dfb5b4;color:var(--t-mal)}
+.callout.warning{background:var(--f-av);border-color:#f1e7bc;color:var(--t-av)}
+.callout.info{background:var(--f-info);border-color:#d0e3f0;color:var(--t-info)}
+.callout h4{font-size:16px;margin-bottom:6px;font-weight:600}
+.callout p{margin:0 0 8px}
+.etq{display:inline-block;padding:.2em .6em .3em;font-size:75%;font-weight:700;line-height:1;color:#fff;border-radius:.25em;white-space:nowrap;vertical-align:middle}
+.etq.ok{background:var(--verde)}.etq.info{background:var(--aqua)}.etq.av{background:var(--amarillo)}.etq.mal{background:var(--rojo)}.etq.gris{background:var(--gris)}.etq.azul{background:var(--azul)}
+.insignia{display:inline-block;min-width:18px;padding:3px 7px;font-size:12px;font-weight:700;line-height:1;color:#fff;text-align:center;background:var(--rojo);border-radius:10px}
+
+/* formularios */
+.grupo{margin-bottom:14px}
+.grupo>label,.etiqueta{display:block;font-weight:700;margin-bottom:5px}
+.ayuda{color:var(--suave);font-size:12px;margin-top:4px}
+.control{display:block;width:100%;min-height:40px;padding:8px 12px;border:1px solid #ccc;border-radius:0;background:var(--caja);color:var(--texto);font-size:16px}
+.control:focus{border-color:var(--azul);outline:0;box-shadow:none}
+textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.dos-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.check input{width:20px;height:20px;margin:1px 0 0}
+.error-campo{color:var(--t-mal);font-size:12px;margin-top:4px}
+
+/* chips de horario y salas */
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--borde);background:var(--caja);padding:8px 10px;min-height:40px;cursor:pointer;border-radius:0}
+.chip[aria-pressed="true"]{background:var(--azul);border-color:#367fa9;color:#fff}
+.tecla{display:inline-grid;place-items:center;width:30px;height:30px;color:#fff;font:700 15px var(--titulos);border-radius:2px;position:relative}
+.sala-opcion{display:flex;align-items:center;gap:8px;border:1px solid var(--borde);background:var(--caja);padding:6px 10px 6px 6px;min-height:44px;cursor:pointer}
+.sala-opcion[aria-pressed="true"]{border-color:var(--azul);box-shadow:inset 0 0 0 1px var(--azul)}
+.sala-opcion .orden{margin-left:auto;font:700 13px var(--titulos);color:var(--azul)}
+.salas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.lista-orden{list-style:none;margin:0;padding:0;border:1px solid var(--borde)}
+.lista-orden li{display:flex;align-items:center;gap:10px;padding:6px 8px;border-top:1px solid var(--linea);background:var(--caja)}
+.lista-orden li:first-child{border-top:0}
+.lista-orden .nombre{flex:1}
+.lista-orden .apagada .tecla{opacity:.35}
+.lista-orden .apagada .nombre{color:var(--suave);text-decoration:line-through}
+
+/* calendario estilo fullcalendar */
+.cal-cab{display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.cal-cab h4{flex:1;text-align:center;font-size:18px;text-transform:lowercase}
+.cal{width:100%;border-collapse:collapse;table-layout:fixed}
+.cal th{font-weight:600;font-size:12px;padding:4px 0;border:1px solid var(--borde);background:var(--linea);color:var(--suave)}
+.cal td{border:1px solid var(--borde);height:52px;vertical-align:top;padding:0}
+.cal button{width:100%;height:100%;min-height:52px;border:0;background:transparent;text-align:right;padding:3px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+.cal button[disabled]{cursor:default;color:var(--suave);opacity:.45;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.035) 6px 7px)}
+.cal .hoy{background:#fcf8e3}
+:root[data-theme="dark"] .cal .hoy{background:#3b3214}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .cal .hoy{background:#3b3214}}
+.cal .otro-mes{opacity:.35}
+.cal .evento{display:block;width:100%;background:var(--azul);color:#fff;font-size:10px;padding:1px 3px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal button[aria-pressed="true"] .num{font-weight:700}
+
+/* listas de corridas y tickets */
+.items{list-style:none;margin:0;padding:0}
+.items li{display:flex;gap:10px;align-items:center;padding:10px;border-top:1px solid var(--linea)}
+.items li:first-child{border-top:0}
+.items .principal{flex:1;min-width:0}
+.items .principal b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.items .principal small{color:var(--suave)}
+.ticket{border-top:1px solid var(--linea);padding:12px 10px}
+.ticket:first-child{border-top:0}
+.ticket-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ticket-cab b{font-size:15px}
+.ticket .meta{color:var(--suave);font-size:13px;margin:6px 0}
+.ticket .acciones{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.vacio{padding:18px 10px;color:var(--suave);text-align:center}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+.copiable{display:flex;gap:6px;align-items:stretch;margin:6px 0}
+.copiable code{flex:1;background:var(--linea);padding:8px;font-size:12px;word-break:break-all;font-family:ui-monospace,Menlo,Consolas,monospace}
+.pie-pagina{color:var(--suave);font-size:12px;padding:10px 20px}
+
+/* aviso flotante */
+.avisos{position:fixed;left:0;right:0;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;padding:0 10px}
+.avisos .alerta{pointer-events:auto;box-shadow:0 2px 8px rgba(0,0,0,.2);max-width:520px;width:100%;margin:0}
+
+/* celular: lateral fuera de pantalla, como UPBnet */
+@media (max-width:992px){
+  .logo{flex-basis:auto;padding:0 12px}
+  .hamburguesa{display:flex}
+  .barra{justify-content:space-between}
+  .lateral{transform:translateX(-220px)}
+  body.menu-abierto .lateral{transform:none}
+  body.menu-abierto .velo{display:block;position:fixed;inset:0;z-index:24;background:rgba(0,0,0,.35)}
+  .derecha{margin-left:0}
+  .migas{position:relative;top:0;right:0;margin-top:6px;background:#efefef;padding:7px 8px}
+  :root[data-theme="dark"] .migas{background:#2c3035}
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .migas{background:#2c3035}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="cabecera">
+  <a class="logo" href="#" id="logo" aria-label="Inicio">
+    <img id="logo-img" src="img/logo-upbnet-01.png" alt="UPBnet" referrerpolicy="no-referrer" onerror="logoFallo(this)">
+    <span class="marca oculto" id="logo-texto">UPBnet</span>
+  </a>
+  <nav class="barra" aria-label="Barra superior">
+    <button class="hamburguesa" id="hamburguesa" aria-label="Alternar navegación" aria-expanded="false"><span></span><span></span><span></span></button>
+    <span class="usuario" id="usuario-barra"></span>
+  </nav>
+</header>
+<aside class="lateral" id="lateral" aria-label="Menú">
+  <div class="panel-usuario"><div class="avatar" id="avatar">U</div><div><b id="saludo">Hola</b><small><span class="punto" id="punto"></span><span id="conexion">En línea</span></small></div></div>
+  <ul class="menu" id="menu"></ul>
+</aside>
+<div class="velo" id="velo"></div>
+<main class="derecha">
+  <section class="encabezado"><h1 id="titulo">Reserva de Salas <small>Panel de Control</small></h1><ol class="migas" id="migas"><li>Inicio</li></ol></section>
+  <section class="contenido" id="contenido"></section>
+  <p class="pie-pagina">Proyecto estudiantil de reserva automática. No es un sistema oficial de la UPB.</p>
+</main>
+<div class="avisos" id="avisos" aria-live="polite"></div>
+
+<script src="cifrado.js"></script>
+<script>
+"use strict";
+/* ───────────────────────── constantes ───────────────────────── */
+const MARCADOR = "<!-- reserva-upb:v1 -->";
+const WF = "reservar.yml";
+const SALAS = [
+  {id:"8", l:"F", n:"Sala de estudio F", c:"#605ca8"},
+  {id:"6", l:"D", n:"Sala de estudio D", c:"#00a65a"},
+  {id:"15",l:"B", n:"Sala de estudio B", c:"#f39c12"},
+  {id:"3", l:"C", n:"Sala de estudio C", c:"#f56954"},
+  {id:"9", l:"G", n:"Sala de estudio G", c:"#00c0ef"},
+  {id:"14",l:"H", n:"Sala de estudio H", c:"#3c8dbc"},
+];
+const HORARIOS = ["7:45-9:45","10:00-12:00","12:15-14:15","14:30-16:30","16:45-18:45","19:00-21:00"];
+const ARRANQUES_BO = ["15:47","16:53","17:37","18:11","18:41"];
+const DIAS = ["dom.","lun.","mar.","mié.","jue.","vie.","sáb."];
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const REPO_DEF = (() => {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/i);
+  const seg = location.pathname.split("/").filter(Boolean)[0];
+  return m && seg ? `${m[1]}/${seg}` : "hugozuniga770/Reserva-De-Salas";
+})();
+
+/* ───────────────────────── utilidades ───────────────────────── */
+const $ = (s, r = document) => r.querySelector(s);
+function h(tag, props, ...hijos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k === "style") e.setAttribute("style", v);
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "value") e.value = v;
+    else if (k === "checked") e.checked = !!v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const x of hijos.flat(9)) if (x != null && x !== false) e.append(x.nodeType ? x : document.createTextNode(String(x)));
+  return e;
+}
+function svg(nombre) {
+  const P = {
+    casa:"M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z", cal:"M7 2v3M17 2v3M3 8h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z",
+    lista:"M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01", engranaje:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+    libro:"M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14zM20 17v4H6.5", ojo:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12zm11 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+    llave:"M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4",
+    play:"M6 4l14 8-14 8z", stop:"M6 6h12v12H6z", matraz:"M9 3h6M10 3v6L4 19a1 1 0 0 0 .9 1.5h14.2A1 1 0 0 0 20 19l-6-10V3",
+    check:"M20 6 9 17l-5-5", x:"M18 6 6 18M6 6l12 12", reloj:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
+    salir:"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9", candado:"M5 11h14v10H5zM8 11V7a4 4 0 1 1 8 0v4",
+    info:"M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01", alerta:"M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01",
+    copiar:"M9 9h11v11H9zM5 15H4V4h11v1", recargar:"M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15",
+    flecha:"M5 12h14M12 5l7 7-7 7", subir:"M12 19V5M5 12l7-7 7 7", bajar:"M12 5v14M19 12l-7 7-7-7", enviar:"M22 2 11 13M22 2l-7 20-4-9-9-4z",
+    usuarios:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
+  };
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("viewBox", "0 0 24 24"); s.setAttribute("fill", "none"); s.setAttribute("stroke", "currentColor");
+  s.setAttribute("stroke-width", "2"); s.setAttribute("stroke-linecap", "round"); s.setAttribute("stroke-linejoin", "round");
+  s.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS("http://www.w3.org/2000/svg", "path"); p.setAttribute("d", P[nombre] || ""); s.append(p);
+  return s;
+}
+const fmtH = (s) => s.split("-").map((x) => x.padStart(5, "0")).join(" – ");
+const sala = (id) => SALAS.find((s) => s.id === String(id));
+const tecla = (id) => { const s = sala(id); return h("span", {class: "tecla", style: `background:${s ? s.c : "#777"}`, title: s ? s.n : id}, s ? s.l : "?"); };
+// Hora Bolivia (UTC-4, sin horario de verano): se trabaja con los campos UTC de esta fecha corrida.
+const boAhora = () => new Date(Date.now() - 4 * 3600e3);
+const isoDe = (d) => d.toISOString().slice(0, 10);
+const sumarDias = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return isoDe(d); };
+const minutosBO = () => { const a = boAhora(); return a.getUTCHours() * 60 + a.getUTCMinutes(); };
+// El sistema de la UPB pasa al día siguiente a las 20:00 BO.
+const fechaServidor = () => { const a = boAhora(); return minutosBO() >= 20 * 60 ? sumarDias(isoDe(a), 1) : isoDe(a); };
+const fechaLarga = (iso) => { const d = new Date(iso + "T00:00:00Z"); return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]}`; };
+const horaBO = (isoUtc) => { if (!isoUtc) return ""; const d = new Date(new Date(isoUtc).getTime() - 4 * 3600e3); return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`; };
+const duracion = (min) => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} min`;
+const nuevaRef = () => { const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const b = crypto.getRandomValues(new Uint8Array(6)); return Array.from(b, (x) => a[x % a.length]).join(""); };
+const refDeTitulo = (t) => (String(t || "").match(/ref ([A-Z0-9]{6})/) || [])[1] || "";
+const fechaDeTitulo = (t) => (String(t || "").match(/(\d{4}-\d{2}-\d{2})/) || [])[1] || "";
+const horarioDeTitulo = (t) => (String(t || "").match(/(\d{1,2}:\d{2}-\d{1,2}:\d{2})/) || [])[1] || "";
+async function copiar(texto, msg = "Copiado.") {
+  try { await navigator.clipboard.writeText(texto); aviso(msg, "ok"); }
+  catch { const t = h("textarea", {class: "control"}, texto); document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); aviso(msg, "ok"); }
+}
+
+/* ───────────────────────── almacenamiento (solo en ESTE teléfono) ───────────────────────── */
+const guardado = {
+  get(k, def = "") { try { return localStorage.getItem("upb_" + k) ?? def; } catch { return def; } },
+  set(k, v) { try { v === "" || v == null ? localStorage.removeItem("upb_" + k) : localStorage.setItem("upb_" + k, v); } catch {} },
+  json(k, def) { try { return JSON.parse(this.get(k, "")) ?? def; } catch { return def; } },
+};
+const esAdmin = () => !!guardado.get("token");
+const repo = () => guardado.get("repo", REPO_DEF) || REPO_DEF;
+
+/* ───────────────────────── GitHub API ───────────────────────── */
+class ErrorAPI extends Error { constructor(estado, mensaje) { super(mensaje); this.estado = estado; } }
+function explicar(estado, msg, ruta) {
+  msg = msg || "";
+  if (estado === 401) return "El token no es válido o venció. Pega uno nuevo en Conectar.";
+  if (estado === 403 && /rate limit/i.test(msg)) return "GitHub limitó las consultas por un rato. Intenta en unos minutos.";
+  const permiso = /\/variables/.test(ruta) ? "Variables" : /\/actions/.test(ruta) ? "Actions" : /\/issues/.test(ruta) ? "Issues" : /\/contents/.test(ruta) ? "Contents" : "Metadata";
+  if (estado === 403 || (estado === 404 && /Resource not accessible|Not Found/i.test(msg) && ruta !== "")) return `Al token le falta el permiso «${permiso}» (lectura y escritura) para este repositorio.`;
+  if (estado === 422) return `GitHub rechazó el pedido: ${msg}`;
+  return `Error ${estado} de GitHub${msg ? ": " + msg : ""}.`;
+}
+async function api(ruta, {metodo = "GET", cuerpo, conToken = true} = {}) {
+  const cab = {Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"};
+  if (conToken && guardado.get("token")) cab.Authorization = "Bearer " + guardado.get("token");
+  if (cuerpo !== undefined) cab["Content-Type"] = "application/json";
+  let r;
+  try { r = await fetch(`https://api.github.com/repos/${repo()}${ruta}`, {method: metodo, headers: cab, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo), cache: "no-store"}); }
+  catch { throw new ErrorAPI(0, "Sin conexión con GitHub. Revisa tus datos móviles o el wifi."); }
+  if (r.status === 204) return null;
+  let datos = null; try { datos = await r.json(); } catch {}
+  if (!r.ok) throw new ErrorAPI(r.status, explicar(r.status, datos && datos.message, ruta));
+  return datos;
+}
+const corridas = () => api(`/actions/workflows/${WF}/runs?per_page=40`).then((d) => d.workflow_runs || []);
+const activa = (r) => ["queued", "in_progress", "waiting", "pending", "requested"].includes(r.status);
+const nTicketDeCorrida = (r) => +((r.display_title || r.name || "").match(/^Solicitud #(\d+)/) || [])[1] || 0;
+const esTuya = (r) => !nTicketDeCorrida(r);
+async function despachar(inputs = {}) { await api(`/actions/workflows/${WF}/dispatches`, {metodo: "POST", cuerpo: {ref: "main", inputs}}); }
+async function ponerEtiquetas(n, etiquetas) { await api(`/issues/${n}/labels`, {metodo: "POST", cuerpo: {labels: etiquetas}}); }
+async function quitarEtiqueta(n, e) { try { await api(`/issues/${n}/labels/${encodeURIComponent(e)}`, {metodo: "DELETE"}); } catch (x) { if (x.estado !== 404) throw x; } }
+async function ticketsAbiertos() {
+  const d = await api(`/issues?state=open&per_page=100`);
+  return d.filter((i) => !i.pull_request && (i.body || "").includes(MARCADOR));
+}
+
+/* ───────────────────────── avisos ───────────────────────── */
+function aviso(texto, tipo = "info", ms = 4500) {
+  const ic = {ok: "check", info: "info", av: "alerta", mal: "alerta"}[tipo] || "info";
+  const a = h("div", {class: `alerta alerta-${tipo}`, role: tipo === "mal" ? "alert" : "status"}, svg(ic), h("div", null, texto));
+  $("#avisos").append(a);
+  setTimeout(() => a.remove(), ms);
+}
+async function accion(boton, fn) {
+  const txt = boton.textContent; boton.disabled = true;
+  try { await fn(); } catch (e) { aviso(e.message || String(e), "mal", 7000); } finally { boton.disabled = false; if (!boton.textContent) boton.textContent = txt; }
+}
+
+/* ───────────────────────── marco (cabecera, menú) ───────────────────────── */
+(function logo() {
+  const img = $("#logo-img");
+  if (img.complete && img.naturalWidth === 0) window.logoFallo(img);  // falló antes de llegar aquí
+})();
+$("#hamburguesa").addEventListener("click", () => { const ab = document.body.classList.toggle("menu-abierto"); $("#hamburguesa").setAttribute("aria-expanded", ab); });
+$("#velo").addEventListener("click", () => document.body.classList.remove("menu-abierto"));
+
+function dibujarMarco(vista) {
+  const admin = esAdmin();
+  const nombre = guardado.get("nombre_mostrar") || "";
+  $("#saludo").textContent = admin ? `Hola, ${nombre.split(" ")[0] || "administrador"}` : "Hola";
+  $("#avatar").textContent = (admin ? (nombre[0] || "A") : "U").toUpperCase();
+  $("#conexion").textContent = admin ? "Administrador" : "En línea";
+  $("#usuario-barra").replaceChildren(admin ? h("span", null, nombre || "Administrador") : h("span", null, "Reserva de Salas"));
+  $("#logo").setAttribute("href", admin ? "#inicio" : "#pedir");
+  const item = (hash, txt, ic, extra) => h("li", null, h("a", {href: "#" + hash, class: vista === hash ? "activo" : null, onclick: () => document.body.classList.remove("menu-abierto")}, svg(ic), txt, extra || null));
+  const m = $("#menu"); m.replaceChildren();
+  if (admin) {
+    const pend = +guardado.get("pendientes", "0");
+    m.append(item("inicio", "Inicio", "casa"), item("tickets", "Solicitudes", "lista", pend ? h("span", {class: "insignia"}, pend) : null),
+      item("ajustes", "Ajustes", "engranaje"), item("guia", "Guía de instalación", "libro"),
+      h("li", {class: "seccion"}, "Página pública"), item("pedir", "Pedir sala", "cal"), item("estado", "Estado", "ojo"),
+      h("li", null, h("a", {href: "#conectar"}, svg("salir"), "Desconectar")));
+  } else {
+    m.append(item("pedir", "Pedir sala", "cal"), item("estado", "Estado de mis solicitudes", "ojo"), item("conectar", "Administrar", "candado"));
+  }
+}
+function encabezado(titulo, sub, migas) {
+  $("#titulo").replaceChildren(titulo, " ", h("small", null, sub));
+  $("#migas").replaceChildren(...migas.map((m) => h("li", null, m)));
+  document.title = `${titulo} — UPBnet`;
+}
+
+/* ───────────────────────── componentes ───────────────────────── */
+function cuadro({color, titulo, texto, icono, pie, alPie}) {
+  return h("div", {class: `cuadro bg-${color}`},
+    h("div", {class: "dentro"}, h("h3", null, titulo), h("p", null, texto)),
+    h("span", {class: "icono"}, (() => { const s = svg(icono); s.setAttribute("width", "64"); s.setAttribute("height", "64"); return s; })()),
+    pie ? h("button", {class: "pie", onclick: alPie}, pie, " ›") : null);
+}
+function caja({tipo = "", titulo, icono, der, cuerpo, pie}) {
+  return h("div", {class: `caja ${tipo}`},
+    titulo ? h("div", {class: "caja-cab"}, icono ? svg(icono) : null, h("h3", null, titulo), der ? h("div", {class: "der"}, der) : null) : null,
+    h("div", {class: "caja-cuerpo"}, cuerpo),
+    pie ? h("div", {class: "caja-pie"}, pie) : null);
+}
+const boton = (txt, clase, onclick, ic, extra = {}) => h("button", {class: `btn ${clase}`, type: "button", onclick, ...extra}, ic ? svg(ic) : null, txt);
+
+/* Calendario mensual estilo UPBnet (fullcalendar): selecciona uno o varios días. */
+function calendario({seleccion, alCambiar, min, max, horario}) {
+  const raiz = h("div");
+  let mes = (seleccion.size ? [...seleccion].sort()[0] : min).slice(0, 7);
+  function dibujar() {
+    const [a, m] = mes.split("-").map(Number);
+    const primero = new Date(Date.UTC(a, m - 1, 1));
+    const desfase = (primero.getUTCDay() + 6) % 7; // lunes primero
+    const inicio = sumarDias(isoDe(primero), -desfase);
+    const hoy = isoDe(boAhora());
+    const tabla = h("table", {class: "cal"}, h("thead", null, h("tr", null, ["lun.", "mar.", "mié.", "jue.", "vie.", "sáb.", "dom."].map((d) => h("th", null, d)))));
+    const cuerpo = h("tbody");
+    for (let f = 0; f < 6; f++) {
+      const tr = h("tr");
+      for (let c = 0; c < 7; c++) {
+        const iso = sumarDias(inicio, f * 7 + c);
+        const d = new Date(iso + "T00:00:00Z");
+        const domingo = d.getUTCDay() === 0;
+        const fuera = iso < min || iso > max || domingo;
+        const sel = seleccion.has(iso);
+        const b = h("button", {type: "button", disabled: fuera, "aria-pressed": sel ? "true" : "false",
+          "aria-label": `${fechaLarga(iso)}${domingo ? " (domingo: sin reservas)" : ""}`,
+          class: [iso === hoy ? "hoy" : "", iso.slice(0, 7) !== mes ? "otro-mes" : ""].join(" "),
+          onclick: () => { sel ? seleccion.delete(iso) : seleccion.add(iso); alCambiar(); dibujar(); }},
+          h("span", {class: "num"}, d.getUTCDate()),
+          sel ? h("span", {class: "evento"}, horario().split("-")[0]) : null);
+        tr.append(h("td", null, b));
+      }
+      cuerpo.append(tr);
+    }
+    tabla.append(cuerpo);
+    const mover = (n) => { const d = new Date(Date.UTC(a, m - 1 + n, 1)); const nuevo = isoDe(d).slice(0, 7); if (nuevo >= min.slice(0, 7) && nuevo <= max.slice(0, 7)) { mes = nuevo; dibujar(); } };
+    raiz.replaceChildren(
+      h("div", {class: "cal-cab"},
+        boton("‹", "btn-default btn-sm", () => mover(-1), null, {"aria-label": "Mes anterior"}),
+        boton("hoy", "btn-default btn-sm", () => { mes = min.slice(0, 7); dibujar(); }),
+        h("h4", null, `${MESES[m - 1]} ${a}`),
+        boton("›", "btn-default btn-sm", () => mover(1), null, {"aria-label": "Mes siguiente"})),
+      tabla);
+  }
+  dibujar();
+  return raiz;
+}
+
+/* Formulario de solicitud: lo usan la página pública y el panel. Nada se guarda: se cifra y se olvida. */
+function formularioTicket({admin = false, alPreparar}) {
+  const fechas = new Set();
+  const salasElegidas = [];
+  let horario = "12:15-14:15";
+  const errores = {};
+  const campo = (id, etiqueta, attrs = {}, ayuda) => h("div", {class: "grupo"},
+    h("label", {for: id}, etiqueta), h("input", {class: "control", id, autocomplete: "off", ...attrs}),
+    ayuda ? h("div", {class: "ayuda"}, ayuda) : null, errores[id] = h("div", {class: "error-campo", role: "alert"}));
+  const nombre = campo("t-nombre", "Nombre(s)", {autocomplete: "given-name", maxlength: 60});
+  const apellido = campo("t-apellido", "Apellido(s)", {autocomplete: "family-name", maxlength: 60});
+  const codigo = campo("t-codigo", "Código de estudiante", {inputmode: "numeric", pattern: "[0-9]*", maxlength: 10}, "El mismo de UPBnet. Sin él, el sistema no acepta la reserva.");
+  const motivo = campo("t-motivo", "Detalle de la actividad", {maxlength: 120, value: "Estudio académico"});
+
+  const chipsHorario = h("div", {class: "chips", role: "group", "aria-label": "Horario"});
+  const pintarHorarios = () => chipsHorario.replaceChildren(...HORARIOS.map((x) => h("button", {type: "button", class: "chip", "aria-pressed": x === horario ? "true" : "false", onclick: () => { horario = x; pintarHorarios(); cal.replaceWith(cal = nuevoCal()); }}, fmtH(x))));
+  pintarHorarios();
+
+  const salasCaja = h("div", {class: "salas-grid"});
+  const pintarSalas = () => salasCaja.replaceChildren(...SALAS.map((s) => {
+    const pos = salasElegidas.indexOf(s.id);
+    return h("button", {type: "button", class: "sala-opcion", "aria-pressed": pos >= 0 ? "true" : "false",
+      onclick: () => { pos >= 0 ? salasElegidas.splice(pos, 1) : salasElegidas.push(s.id); pintarSalas(); }},
+      tecla(s.id), h("span", null, s.n.replace("Sala de estudio ", "Sala ")), h("span", {class: "orden"}, pos >= 0 ? `${pos + 1}ª` : ""));
+  }));
+  pintarSalas();
+  errores.salas = h("div", {class: "error-campo", role: "alert"});
+
+  const min = fechaServidor();
+  const max = sumarDias(isoDe(boAhora()), 90);
+  const resumenFechas = h("div", {class: "ayuda"});
+  const actualizarResumen = () => {
+    const l = [...fechas].sort();
+    resumenFechas.textContent = l.length ? `${l.length} día(s): ${l.map(fechaLarga).join(", ")}` : "Toca uno o varios días. Cada día es una solicitud aparte.";
+    btn.textContent = l.length > 1 ? `Preparar ${l.length} solicitudes` : "Preparar solicitud";
+  };
+  const nuevoCal = () => calendario({seleccion: fechas, alCambiar: actualizarResumen, min, max, horario: () => horario});
+  let cal = nuevoCal();
+  errores.fechas = h("div", {class: "error-campo", role: "alert"});
+
+  const ntfy = admin ? null : campo("t-ntfy", "Aviso al celular (opcional)", {maxlength: 64, placeholder: "nombre de tu canal en la app ntfy"}, "Instala ntfy, suscríbete a un nombre raro y escríbelo aquí para que te avise el resultado.");
+  const consentimiento = admin ? null : h("label", {class: "check grupo"}, h("input", {type: "checkbox", id: "t-ok"}),
+    h("span", null, "Autorizo que el bot reserve a mi nombre. Mis datos se envían cifrados y se borran después de usarlos."));
+  errores.ok = h("div", {class: "error-campo", role: "alert"});
+
+  const btn = boton("Preparar solicitud", "btn-primary btn-lg btn-block", () => enviar(), "enviar");
+  actualizarResumen();
+
+  async function enviar() {
+    Object.values(errores).forEach((e) => (e.textContent = ""));
+    const v = (id) => $("#" + id).value.trim();
+    const datos = {nombre: v("t-nombre"), apellido: v("t-apellido"), codigo: v("t-codigo"), proposito: v("t-motivo") || "Estudio académico"};
+    let ok = true;
+    const letra = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ' .-]{2,60}$/;
+    if (!letra.test(datos.nombre)) { errores["t-nombre"].textContent = "Escribe tu nombre como figura en UPBnet."; ok = false; }
+    if (!letra.test(datos.apellido)) { errores["t-apellido"].textContent = "Escribe tu apellido como figura en UPBnet."; ok = false; }
+    if (!/^\d{3,10}$/.test(datos.codigo)) { errores["t-codigo"].textContent = "El código lleva solo números."; ok = false; }
+    if (!salasElegidas.length) { errores.salas.textContent = "Elige al menos una sala."; ok = false; }
+    if (!fechas.size) { errores.fechas.textContent = "Elige al menos un día en el calendario."; ok = false; }
+    if (consentimiento && !$("#t-ok").checked) { errores.ok.textContent = "Necesitamos tu autorización para reservar a tu nombre."; ok = false; }
+    if (!ok) { aviso("Revisa los campos marcados.", "av"); return; }
+    btn.disabled = true;
+    try {
+      const pub = await clavePublica();
+      if (!pub) throw new Error("Las solicitudes todavía no están activas: falta la llave pública.");
+      const tickets = [];
+      for (const fecha of [...fechas].sort()) {
+        const ref = nuevaRef();
+        const token = await UPBCifrado.cifrar({v: 1, ...datos, horario, salas: [...salasElegidas], fecha, ntfy: ntfy ? v("t-ntfy") : ""}, pub);
+        tickets.push({ref, fecha, horario, titulo: `Solicitud de reserva · ${fecha} · ${horario} · ref ${ref}`,
+          cuerpo: `${MARCADOR}\nSolicitud cifrada para el bot de reservas. Solo el bot puede leerla y la borra después de usarla.\n\n${token}\n`, token});
+      }
+      // Datos personales: fuera de la pantalla y de la memoria del formulario.
+      ["t-nombre", "t-apellido", "t-codigo"].forEach((id) => ($("#" + id).value = ""));
+      fechas.clear(); actualizarResumen(); cal.replaceWith(cal = nuevoCal());
+      await alPreparar(tickets);
+    } catch (e) { aviso(e.message, "mal", 7000); }
+    finally { btn.disabled = false; }
+  }
+
+  return h("div", null,
+    h("div", {class: "dos-col"}, nombre, apellido), codigo, motivo,
+    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Horario"), chipsHorario),
+    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), h("div", {class: "ayuda", style: "margin:0 0 6px"}, "Toca en el orden que prefieras: 1ª, 2ª, 3ª…"), salasCaja, errores.salas),
+    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "¿Qué día(s) quieres la sala?"), cal, resumenFechas, errores.fechas),
+    ntfy, consentimiento, errores.ok, btn);
+}
+
+let _pub = null;
+async function clavePublica() {
+  if (_pub) return _pub;
+  try { const r = await fetch("clave_publica.txt?t=" + Date.now(), {cache: "no-store"}); if (r.ok) { const t = (await r.text()).trim(); if (t.length > 200) return (_pub = t); } } catch {}
+  return guardado.get("publica") || null;
+}
+
+/* ───────────────────────── vista: pedir (pública) ───────────────────────── */
+async function vistaPedir(c) {
+  encabezado("Pedir sala", "Estudiante Pregrado", ["Inicio", "Pedir sala"]);
+  const pub = await clavePublica();
+  c.append(h("div", {class: "alerta alerta-info"}, svg("candado"), h("div", null,
+    h("b", null, "Así funciona. "), "El bot intenta reservar a tu nombre cuando el sistema abre (20:00 del día anterior). Tus datos se cifran en este teléfono: en GitHub nadie más puede leerlos y el bot los borra apenas los usa.")));
+  if (!pub) {
+    c.append(h("div", {class: "callout warning"}, h("h4", null, "Las solicitudes todavía no están activas"), h("p", null, "El administrador aún no creó la llave de cifrado. Vuelve a intentarlo más tarde.")));
+    return;
+  }
+  const resultado = h("div");
+  c.append(h("div", {class: "fila dos"},
+    caja({tipo: "primary", titulo: "Nueva solicitud", icono: "cal", cuerpo: formularioTicket({alPreparar: (t) => mostrarParaEnviar(resultado, t)})}),
+    h("div", null, resultado, caja({tipo: "info", titulo: "Antes de pedir", icono: "info", cuerpo: h("ul", {style: "margin:0;padding-left:18px"},
+      h("li", null, "Puedes pedir con semanas de anticipación: el bot lo intenta la noche anterior a cada día."),
+      h("li", null, "Solo salas de estudio. Si tu primera opción ya está tomada, prueba la siguiente."),
+      h("li", null, "Necesitas una cuenta de GitHub para enviar (es gratis). Si no tienes, copia el texto y mándaselo al administrador por WhatsApp."),
+      h("li", null, "Sigue tu solicitud en «Estado» con el código de referencia."))}))));
+}
+function mostrarParaEnviar(destino, tickets) {
+  const mias = guardado.json("mis_tickets", []);
+  tickets.forEach((t) => mias.push({ref: t.ref, fecha: t.fecha, horario: t.horario}));
+  guardado.set("mis_tickets", JSON.stringify(mias.slice(-40)));
+  const url = (t) => `https://github.com/${repo()}/issues/new?title=${encodeURIComponent(t.titulo)}&body=${encodeURIComponent(t.cuerpo)}`;
+  const textoWsp = "Solicitudes de sala (cifradas):\n" + tickets.map((t) => `UPB|${t.fecha}|${t.horario}|${t.ref}|${t.token}`).join("\n");
+  destino.replaceChildren(caja({tipo: "success", titulo: tickets.length > 1 ? `${tickets.length} solicitudes listas` : "Solicitud lista", icono: "check",
+    cuerpo: h("div", null,
+      h("p", {style: "margin-top:0"}, "Envía cada una a GitHub y toca «Submit new issue». Guarda tus códigos de referencia para ver el estado."),
+      h("ul", {class: "items"}, tickets.map((t) => h("li", null, h("div", {class: "principal"}, h("b", null, fechaLarga(t.fecha)), h("small", null, `${fmtH(t.horario)} · ref `, h("b", {class: "mono", style: "display:inline"}, t.ref))),
+        h("a", {class: "btn btn-success btn-sm", href: url(t), target: "_blank", rel: "noopener"}, svg("enviar"), "Enviar"))))),
+    pie: [boton("Copiar para WhatsApp", "btn-default", () => copiar(textoWsp, "Copiado. Pégalo en un chat con el administrador."), "copiar"),
+      h("a", {class: "btn btn-default", href: "#estado"}, svg("ojo"), "Ver estado")]}));
+  destino.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+/* ───────────────────────── estado (público y admin) ───────────────────────── */
+function estadoTicket(issue, corridasLista) {
+  const et = new Set((issue.labels || []).map((l) => l.name));
+  const run = corridasLista.find((r) => nTicketDeCorrida(r) === issue.number && activa(r));
+  if (run) return run.status === "in_progress" ? ["En curso: el bot está vigilando", "ok"] : ["En cola para arrancar", "info"];
+  if (et.has("reservada")) return ["Reservada", "ok"];
+  if (et.has("sin-sala")) return ["No se consiguió sala", "mal"];
+  if (et.has("invalida")) return ["Descartada (revisa los datos)", "mal"];
+  if (et.has("rechazada")) return ["Rechazada por el administrador", "mal"];
+  if (issue.state === "closed") return ["Retirada", "gris"];
+  if (et.has("en-curso")) return ["Lanzada", "info"];
+  if (et.has("aprobada")) return ["Aprobada: se lanza la tarde anterior", "azul"];
+  return ["Pendiente de aprobación", "av"];
+}
+function estadoBot(lista, publico = false) {
+  const tuya = lista.find((r) => esTuya(r) && activa(r));
+  const m = minutosBO();
+  const critico = m >= 18 * 60 + 45 && m <= 21 * 60 + 15;
+  if (tuya) return tuya.status === "in_progress" ? {color: "verde", titulo: "Vigilando", texto: "El bot está corriendo ahora", run: tuya} : {color: "amarillo", titulo: "En cola", texto: "GitHub está por arrancarlo", run: tuya};
+  if (critico) return publico ? {color: "gris", titulo: "Sin corrida", texto: "no está corriendo en este momento"}
+                              : {color: "rojo", titulo: "No corre", texto: "¡Debería estar corriendo!", critico: true};
+  const prox = ARRANQUES_BO.find((t) => { const [hh, mm] = t.split(":").map(Number); return hh * 60 + mm > m; });
+  return {color: "gris", titulo: "Dormido", texto: prox ? `Arranca solo a las ${prox}` : "Arranca mañana a las 15:47"};
+}
+function cuentaRegresiva() {
+  const m = minutosBO();
+  if (m >= 20 * 60 && m < 21 * 60 + 15) return {titulo: "Abierto", texto: "Apertura en curso hasta las 21:15"};
+  const falta = m < 20 * 60 ? 20 * 60 - m : 24 * 60 - m + 20 * 60;
+  return {titulo: duracion(falta), texto: "para la apertura de las 20:00"};
+}
+
+async function vistaEstado(c) {
+  encabezado("Estado", "Mis solicitudes", ["Inicio", "Estado"]);
+  const zona = h("div"), lista = h("div");
+  const buscar = h("input", {class: "control", placeholder: "Código de referencia, p. ej. K7X2QF", maxlength: 6, style: "text-transform:uppercase"});
+  c.append(zona, caja({tipo: "primary", titulo: "Mis solicitudes", icono: "lista", der: boton("Actualizar", "btn-default btn-sm", () => cargar(), "recargar"),
+    cuerpo: h("div", null, lista, h("div", {class: "grupo", style: "margin-top:12px"}, h("label", null, "Buscar por referencia"),
+      h("div", {class: "copiable"}, buscar, boton("Buscar", "btn-primary", () => {
+        const r = buscar.value.trim().toUpperCase(); if (!/^[A-Z0-9]{6}$/.test(r)) return aviso("La referencia tiene 6 letras o números.", "av");
+        const mias = guardado.json("mis_tickets", []); if (!mias.some((x) => x.ref === r)) { mias.push({ref: r}); guardado.set("mis_tickets", JSON.stringify(mias)); }
+        cargar(); }))))}));
+  async function cargar() {
+    lista.replaceChildren(h("div", {class: "vacio"}, "Consultando…"));
+    let runs = [], issues = [];
+    try {
+      [runs, issues] = await Promise.all([corridas(), api(`/issues?state=all&per_page=100&sort=created&direction=desc`)]);
+    } catch (e) { lista.replaceChildren(h("div", {class: "alerta alerta-mal"}, svg("alerta"), h("div", null, e.message))); return; }
+    const bot = estadoBot(runs, true), cr = cuentaRegresiva();
+    const tickets = runs.filter((r) => nTicketDeCorrida(r) && activa(r)).length;
+    zona.replaceChildren(h("div", {class: "fila cuatro", style: "margin-bottom:15px"},
+      cuadro({color: "aqua", titulo: cr.titulo, texto: cr.texto, icono: "reloj"}),
+      cuadro({color: bot.color, titulo: bot.titulo, texto: `Bot principal: ${bot.texto}`, icono: "play"}),
+      cuadro({color: "morado", titulo: String(tickets), texto: "Solicitudes corriendo ahora", icono: "usuarios"}),
+      cuadro({color: "amarillo", titulo: "20:00", texto: "El sistema abre el día siguiente", icono: "cal"})));
+    const mias = guardado.json("mis_tickets", []);
+    if (!mias.length) { lista.replaceChildren(h("div", {class: "vacio"}, "Todavía no tienes solicitudes en este teléfono. ", h("a", {href: "#pedir"}, "Pide una sala"), ".")); return; }
+    lista.replaceChildren(...mias.slice().reverse().map((m) => {
+      const is = issues.find((i) => !i.pull_request && refDeTitulo(i.title) === m.ref);
+      const fecha = m.fecha || (is && fechaDeTitulo(is.title)), hor = m.horario || (is && horarioDeTitulo(is.title));
+      const [txt, col] = is ? estadoTicket(is, runs) : ["Aún no llega a GitHub", "gris"];
+      const detalle = h("div", {class: "meta"});
+      return h("div", {class: "ticket"},
+        h("div", {class: "ticket-cab"}, h("b", null, fecha ? fechaLarga(fecha) : "Solicitud"), h("span", {class: `etq ${col}`}, txt)),
+        h("div", {class: "meta"}, `${hor ? fmtH(hor) + " · " : ""}ref ${m.ref}${is ? ` · #${is.number}` : ""}`),
+        detalle,
+        h("div", {class: "acciones"},
+          is && is.state === "closed" ? boton("Ver resultado", "btn-default btn-sm", async (e) => {
+            await accion(e.currentTarget, async () => { const com = await api(`/issues/${is.number}/comments?per_page=20`); const ult = com.filter((x) => /bot/.test(x.user.login)).pop() || com.pop(); detalle.textContent = ult ? ult.body : "Sin comentarios."; }); }, "ojo") : null,
+          boton("Quitar de este teléfono", "btn-default btn-sm", () => { guardado.set("mis_tickets", JSON.stringify(guardado.json("mis_tickets", []).filter((x) => x.ref !== m.ref))); cargar(); }, "x")));
+    }));
+  }
+  await cargar();
+  temporizador(cargar, 120000);
+}
+
+/* ───────────────────────── vista: inicio (admin) ───────────────────────── */
+async function vistaInicio(c) {
+  encabezado("Reserva de Salas", "Panel de Control", ["Inicio"]);
+  const zona = h("div"), acciones = h("div"), lista = h("div");
+  c.append(zona, h("div", {class: "fila dos"}, acciones, lista));
+  async function cargar() {
+    let runs = [], vars = {}, tickets = [];
+    try { [runs, vars, tickets] = await Promise.all([corridas(), leerVariables(), ticketsAbiertos()]); }
+    catch (e) { zona.replaceChildren(h("div", {class: "alerta alerta-mal"}, svg("alerta"), h("div", null, e.message, " ", h("a", {href: "#guia"}, "Abrir la guía")))); return; }
+    const pend = tickets.filter((t) => !t.labels.some((l) => ["aprobada", "rechazada", "en-curso"].includes(l.name))).length;
+    guardado.set("pendientes", String(pend)); dibujarMarco("inicio");
+    const bot = estadoBot(runs), cr = cuentaRegresiva();
+    const pausado = vars.UPB_PAUSADO === "1";
+    const salasTxt = (vars.UPB_SALAS || "8,6,15,3").split(",").map((i) => (sala(i) || {}).l || i).join(" › ");
+    zona.replaceChildren(...[
+      bot.critico && !pausado ? h("div", {class: "callout danger"}, h("h4", null, "El bot no está corriendo"),
+        h("p", null, `Faltan ${cr.titulo} para la apertura y no hay ninguna corrida tuya activa. GitHub a veces retrasa los arranques automáticos.`),
+        boton("Arrancarlo ahora", "btn-danger btn-lg", (e) => correr(e.currentTarget, {}), "play")) : null,
+      pausado ? h("div", {class: "callout warning"}, h("h4", null, "Arranques automáticos en pausa"), h("p", null, "Tu reserva no se intentará sola hasta que quites la pausa en Ajustes.")) : null,
+      h("div", {class: "fila cuatro", style: "margin-bottom:15px"},
+        cuadro({color: "aqua", titulo: cr.titulo, texto: cr.texto, icono: "reloj"}),
+        cuadro({color: pausado ? "gris" : bot.color, titulo: pausado ? "En pausa" : bot.titulo, texto: pausado ? "Automáticos detenidos" : bot.texto, icono: "play",
+          pie: bot.run ? "Ver registro" : null, alPie: () => bot.run && window.open(bot.run.html_url, "_blank")}),
+        cuadro({color: "amarillo", titulo: String(tickets.length), texto: pend ? `Solicitudes · ${pend} sin revisar` : "Solicitudes abiertas", icono: "usuarios", pie: "Revisar", alPie: () => (location.hash = "#tickets")}),
+        cuadro({color: "morado", titulo: salasTxt, texto: `Tu horario: ${fmtH(vars.UPB_HORARIO || "12:15-14:15")}`, icono: "cal", pie: "Cambiar", alPie: () => (location.hash = "#ajustes")}))].filter(Boolean));
+    const tuya = runs.find((r) => esTuya(r) && activa(r));
+    acciones.replaceChildren(caja({tipo: "primary", titulo: "Acciones", icono: "play", cuerpo: h("div", {style: "display:grid;gap:8px"},
+      boton("Correr bot ahora", "btn-primary btn-lg btn-block", (e) => correr(e.currentTarget, {}), "play"),
+      boton("Probar sin reservar", "btn-default btn-block", (e) => correr(e.currentTarget, {dry_run: true}), "matraz"),
+      tuya ? boton("Detener tu corrida", "btn-danger btn-block", (e) => accion(e.currentTarget, async () => { await api(`/actions/runs/${tuya.id}/cancel`, {metodo: "POST"}); aviso("Corrida detenida.", "ok"); setTimeout(cargar, 3000); }), "stop") : null,
+      h("p", {class: "ayuda", style: "margin:4px 0 0"}, "Fuera de la noche (15:00–21:15) «Correr bot ahora» vigila 60 minutos buscando cancelaciones."))}));
+    lista.replaceChildren(caja({tipo: "info", titulo: "Corridas recientes", icono: "lista", der: boton("", "btn-default btn-sm", () => cargar(), "recargar", {"aria-label": "Actualizar"}),
+      cuerpo: runs.length ? h("ul", {class: "items"}, runs.slice(0, 10).map((r) => {
+        const n = nTicketDeCorrida(r);
+        const [t, col] = activa(r) ? (r.status === "in_progress" ? ["Corriendo", "ok"] : ["En cola", "info"]) :
+          r.conclusion === "success" ? ["Terminó bien", "azul"] : r.conclusion === "cancelled" ? ["Cancelada", "gris"] : r.conclusion === "skipped" ? ["En pausa", "gris"] : ["Con error", "mal"];
+        return h("li", null, h("div", {class: "principal"}, h("b", null, n ? `Solicitud #${n}` : (r.display_title || "Tu reserva")),
+          h("small", null, `${horaBO(r.run_started_at || r.created_at)} · ${r.event === "schedule" ? "automática" : r.event === "workflow_dispatch" ? "manual" : r.event}`)),
+          h("span", {class: `etq ${col}`}, t), h("a", {class: "btn btn-default btn-sm", href: r.html_url, target: "_blank", rel: "noopener"}, "Ver"));
+      })) : h("div", {class: "vacio"}, "Todavía no hay corridas.")}));
+  }
+  async function correr(b, inputs) {
+    await accion(b, async () => {
+      const m = minutosBO();
+      if (!inputs.dry_run && (m < 15 * 60 || m > 21 * 60 + 15)) inputs.minutos = "60";
+      await despachar(inputs);
+      aviso(inputs.dry_run ? "Prueba lanzada. Aparece en la lista en unos segundos." : "Bot lanzado. Aparece en la lista en unos segundos.", "ok");
+      setTimeout(cargar, 4000);
+    });
+  }
+  await cargar();
+  temporizador(cargar, 30000);
+}
+
+/* ───────────────────────── vista: solicitudes (admin) ───────────────────────── */
+function listoParaLanzar(fecha) {
+  const sv = fechaServidor();
+  return fecha === sv || (fecha === sumarDias(sv, 1) && minutosBO() >= 15 * 60 + 30);
+}
+async function vistaTickets(c) {
+  encabezado("Solicitudes", "de otros estudiantes", ["Inicio", "Solicitudes"]);
+  const privada = guardado.get("privada");
+  const lista = h("div"), agregar = h("div");
+  if (!privada) c.append(h("div", {class: "callout warning"}, h("h4", null, "Este teléfono no tiene la llave"), h("p", null, "Sin la llave no puedes ver los nombres. Créala o impórtala en la Guía, paso 3."), h("a", {class: "btn btn-warning", href: "#guia"}, "Abrir la guía")));
+  c.append(h("div", {class: "alerta alerta-info"}, svg("info"), h("div", null,
+    "Cada solicitud corre en su propia corrida, aislada de las demás y de la tuya. Las pendientes se aprueban solas a la hora de auto-aprobación (Ajustes). Al terminar, el bot borra los datos del ticket.")),
+    caja({tipo: "primary", titulo: "Abiertas", icono: "lista", der: boton("", "btn-default btn-sm", () => cargar(), "recargar", {"aria-label": "Actualizar"}), cuerpo: lista}),
+    agregar);
+  agregar.append(caja({tipo: "success", titulo: "Agregar una solicitud", icono: "usuarios", cuerpo: h("div", null,
+    h("p", {class: "ayuda", style: "margin-top:0"}, "Para pedidos que te llegan por WhatsApp. Se crean ya aprobadas."),
+    formularioTicket({admin: true, alPreparar: async (ts) => { for (const t of ts) await api("/issues", {metodo: "POST", cuerpo: {title: t.titulo, body: t.cuerpo, labels: ["aprobada"]}}); aviso(`${ts.length} solicitud(es) creada(s).`, "ok"); cargar(); }}),
+    h("hr", {style: "border:0;border-top:1px solid var(--linea);margin:18px 0"}),
+    (() => { const ta = h("textarea", {class: "control", placeholder: "Pega aquí el texto «UPB|…» que te enviaron"});
+      return h("div", {class: "grupo"}, h("label", null, "Pegar texto de WhatsApp"), ta, h("div", {style: "margin-top:8px"}, boton("Crear desde el texto", "btn-default", (e) => accion(e.currentTarget, async () => {
+        const lineas = ta.value.split(/\n/).map((x) => x.trim()).filter((x) => x.startsWith("UPB|"));
+        if (!lineas.length) throw new Error("No encontré líneas que empiecen con «UPB|».");
+        for (const l of lineas) {
+          const [, fecha, hor, ref, token] = l.split("|");
+          if (!UPBCifrado.PATRON.test(token || "")) throw new Error("Una de las líneas está incompleta: pide que la copien de nuevo.");
+          await api("/issues", {metodo: "POST", cuerpo: {title: `Solicitud de reserva · ${fecha} · ${hor} · ref ${ref}`, body: `${MARCADOR}\nSolicitud cifrada recibida por WhatsApp.\n\n${token}\n`, labels: ["aprobada"]}});
+        }
+        ta.value = ""; aviso(`${lineas.length} solicitud(es) creada(s).`, "ok"); cargar();
+      }), "enviar"))); })())}));
+
+  async function cargar() {
+    lista.replaceChildren(h("div", {class: "vacio"}, "Cargando…"));
+    let tickets, runs;
+    try { [tickets, runs] = await Promise.all([ticketsAbiertos(), corridas()]); }
+    catch (e) { lista.replaceChildren(h("div", {class: "alerta alerta-mal"}, svg("alerta"), h("div", null, e.message))); return; }
+    guardado.set("pendientes", String(tickets.filter((t) => !t.labels.some((l) => ["aprobada", "rechazada", "en-curso"].includes(l.name))).length));
+    dibujarMarco("tickets");
+    if (!tickets.length) { lista.replaceChildren(h("div", {class: "vacio"}, "No hay solicitudes abiertas.")); return; }
+    lista.replaceChildren(...await Promise.all(tickets.sort((a, b) => fechaDeTitulo(a.title).localeCompare(fechaDeTitulo(b.title))).map((t) => filaTicket(t, runs, privada, cargar))));
+  }
+  await cargar();
+  temporizador(cargar, 60000);
+}
+async function filaTicket(t, runs, privada, recargar) {
+  let datos = null, error = "";
+  if (privada) { try { datos = await UPBCifrado.descifrar(t.body, privada); } catch { error = "No se pudo leer: se cifró con otra llave."; } }
+  const fecha = (datos && datos.fecha) || fechaDeTitulo(t.title), hor = (datos && datos.horario) || horarioDeTitulo(t.title);
+  const [txt, col] = estadoTicket(t, runs);
+  const et = new Set(t.labels.map((l) => l.name));
+  const run = runs.find((r) => nTicketDeCorrida(r) === t.number && activa(r));
+  const listo = listoParaLanzar(fecha);
+  const lanzar = async () => { await despachar({ticket: String(t.number)}); await ponerEtiquetas(t.number, ["en-curso"]); };
+  return h("div", {class: "ticket"},
+    h("div", {class: "ticket-cab"}, h("b", null, datos ? `${datos.nombre} ${datos.apellido}` : `Solicitud #${t.number}`), h("span", {class: `etq ${col}`}, txt)),
+    h("div", {class: "meta"}, `${fecha ? fechaLarga(fecha) : "sin fecha"} · ${hor ? fmtH(hor) : ""}${datos ? ` · código •••${datos.codigo.slice(-3)}` : ""} · #${t.number} · enviado por @${t.user.login}`),
+    datos ? h("div", {style: "display:flex;gap:4px;align-items:center"}, datos.salas.map(tecla), datos.proposito ? h("span", {class: "ayuda", style: "margin-left:6px"}, datos.proposito) : null) : null,
+    error ? h("div", {class: "error-campo"}, error) : null,
+    h("div", {class: "acciones"},
+      !et.has("aprobada") ? boton("Aprobar", "btn-success btn-sm", (e) => accion(e.currentTarget, async () => {
+        await ponerEtiquetas(t.number, ["aprobada"]); await quitarEtiqueta(t.number, "rechazada");
+        if (listo && !run && !et.has("en-curso")) { await lanzar(); aviso("Aprobada y lanzada en su propia corrida.", "ok"); }
+        else aviso(`Aprobada. Su corrida se lanza sola ${fecha ? "el " + fechaLarga(sumarDias(fecha, -1)) + " desde las 15:30" : "a su hora"}.`, "ok");
+        recargar(); }), "check") : null,
+      et.has("aprobada") && !run && !et.has("en-curso") ? boton("Lanzar ahora", "btn-primary btn-sm", (e) => accion(e.currentTarget, async () => {
+        if (!listo) throw new Error(`Todavía no: su corrida se lanza el ${fechaLarga(sumarDias(fecha, -1))} desde las 15:30. Si la lanzas antes, terminaría antes de la apertura.`);
+        await lanzar(); aviso("Lanzada en su propia corrida.", "ok"); recargar(); }), "play") : null,
+      !et.has("rechazada") ? boton("Rechazar", "btn-warning btn-sm", (e) => accion(e.currentTarget, async () => {
+        await ponerEtiquetas(t.number, ["rechazada"]); await quitarEtiqueta(t.number, "aprobada");
+        if (run) await api(`/actions/runs/${run.id}/cancel`, {metodo: "POST"});
+        aviso(run ? "Rechazada y su corrida detenida." : "Rechazada.", "ok"); recargar(); }), "x") : null,
+      boton("Quitar y borrar datos", "btn-danger btn-sm", (e) => accion(e.currentTarget, async () => {
+        if (!confirm("¿Quitar esta solicitud y borrar sus datos?")) return;
+        if (run) await api(`/actions/runs/${run.id}/cancel`, {metodo: "POST"});
+        await api(`/issues/${t.number}/comments`, {metodo: "POST", cuerpo: {body: "Solicitud retirada por el administrador."}});
+        await api(`/issues/${t.number}`, {metodo: "PATCH", cuerpo: {body: "Datos borrados por el administrador.", state: "closed"}});
+        aviso("Quitada y datos borrados.", "ok"); recargar(); }), "x"),
+      run ? h("a", {class: "btn btn-default btn-sm", href: run.html_url, target: "_blank", rel: "noopener"}, "Ver corrida") : null));
+}
+
+/* ───────────────────────── vista: ajustes (admin) ───────────────────────── */
+async function leerVariables() {
+  const d = await api(`/actions/variables?per_page=30`);
+  return Object.fromEntries((d.variables || []).map((v) => [v.name, v.value]));
+}
+async function guardarVariable(nombre, valor, actuales) {
+  if (valor === "" || valor == null) { if (nombre in actuales) await api(`/actions/variables/${nombre}`, {metodo: "DELETE"}); return; }
+  if (actuales[nombre] === valor) return;
+  if (nombre in actuales) await api(`/actions/variables/${nombre}`, {metodo: "PATCH", cuerpo: {name: nombre, value: valor}});
+  else await api(`/actions/variables`, {metodo: "POST", cuerpo: {name: nombre, value: valor}});
+}
+async function vistaAjustes(c) {
+  encabezado("Ajustes", "Tu reserva y el bot", ["Inicio", "Ajustes"]);
+  let vars;
+  try { vars = await leerVariables(); } catch (e) { c.append(h("div", {class: "alerta alerta-mal"}, svg("alerta"), h("div", null, e.message))); return; }
+  let horario = vars.UPB_HORARIO || "12:15-14:15";
+  const elegidas = (vars.UPB_SALAS || "8,6,15,3").split(",").filter((i) => sala(i));
+  const orden = [...elegidas, ...SALAS.map((s) => s.id).filter((i) => !elegidas.includes(i))];
+  const activas = new Set(elegidas);
+  const inp = (id, val, attrs = {}) => h("input", {class: "control", id, value: val || "", ...attrs});
+  const chips = h("div", {class: "chips"});
+  const pintarChips = () => chips.replaceChildren(...HORARIOS.map((x) => h("button", {type: "button", class: "chip", "aria-pressed": x === horario ? "true" : "false", onclick: () => { horario = x; pintarChips(); }}, fmtH(x))));
+  pintarChips();
+  const ol = h("ol", {class: "lista-orden"});
+  const pintarOrden = () => ol.replaceChildren(...orden.map((id, i) => h("li", {class: activas.has(id) ? "" : "apagada"},
+    tecla(id), h("span", {class: "nombre"}, sala(id).n),
+    h("label", {class: "check"}, h("input", {type: "checkbox", checked: activas.has(id), onchange: (e) => { e.target.checked ? activas.add(id) : activas.delete(id); pintarOrden(); }, "aria-label": `Usar ${sala(id).n}`})),
+    boton("", "btn-default btn-sm", () => { if (i > 0) { [orden[i - 1], orden[i]] = [orden[i], orden[i - 1]]; pintarOrden(); } }, "subir", {"aria-label": "Subir", disabled: i === 0}),
+    boton("", "btn-default btn-sm", () => { if (i < orden.length - 1) { [orden[i + 1], orden[i]] = [orden[i], orden[i + 1]]; pintarOrden(); } }, "bajar", {"aria-label": "Bajar", disabled: i === orden.length - 1}))));
+  pintarOrden();
+  const auto = h("input", {type: "checkbox", id: "a-auto", checked: (vars.UPB_AUTO_APROBAR || "1") === "1"});
+  const pausa = h("input", {type: "checkbox", id: "a-pausa", checked: vars.UPB_PAUSADO === "1"});
+  c.append(h("div", {class: "fila dos"},
+    h("div", null,
+      caja({tipo: "primary", titulo: "Tu reserva", icono: "cal", cuerpo: h("div", null,
+        h("div", {class: "dos-col"}, h("div", {class: "grupo"}, h("label", {for: "a-nombre"}, "Nombre(s)"), inp("a-nombre", vars.UPB_NOMBRE, {placeholder: "el de tus Secrets"})),
+          h("div", {class: "grupo"}, h("label", {for: "a-apellido"}, "Apellido(s)"), inp("a-apellido", vars.UPB_APELLIDO, {placeholder: "el de tus Secrets"}))),
+        h("div", {class: "ayuda", style: "margin:-8px 0 12px"}, "Vacío = usa los de tus Secrets."),
+        h("div", {class: "grupo"}, h("label", {for: "a-motivo"}, "Detalle de la actividad"), inp("a-motivo", vars.UPB_PROPOSITO, {placeholder: "Estudio académico", maxlength: 120})),
+        h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Horario"), chips),
+        h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), ol, h("div", {class: "ayuda"}, "La primera es tu favorita: los tickets de otros no la tocan en los primeros 20 s de la apertura.")),
+        h("p", {class: "ayuda"}, "Tu código de estudiante está en los Secrets de GitHub. ", h("a", {href: `https://github.com/${repo()}/settings/secrets/actions`, target: "_blank", rel: "noopener"}, "Cambiar código")))})),
+    h("div", null,
+      caja({tipo: "warning", titulo: "Solicitudes de otros", icono: "usuarios", cuerpo: h("div", null,
+        h("label", {class: "check grupo"}, auto, h("span", null, "Aprobar solas las pendientes a partir de la hora indicada")),
+        h("div", {class: "dos-col"},
+          h("div", {class: "grupo"}, h("label", {for: "a-hora"}, "Hora (Bolivia)"), inp("a-hora", vars.UPB_AUTO_APROBAR_BO || "18:30", {type: "time"})),
+          h("div", {class: "grupo"}, h("label", {for: "a-max"}, "Personas por noche"), inp("a-max", vars.UPB_MAX_PERSONAS || "4", {type: "number", min: 1, max: 8, inputmode: "numeric"}))),
+        h("div", {class: "ayuda"}, "Te incluye a ti. Cada solicitud corre aparte y más suave que la tuya, para no saturar el sistema de la UPB."))}),
+      caja({tipo: "danger", titulo: "Bot", icono: "engranaje", cuerpo: h("label", {class: "check"}, pausa, h("span", null, h("b", null, "Pausar los arranques automáticos"), h("br"), h("span", {class: "ayuda"}, "Para feriados o vacaciones. «Correr bot ahora» sigue funcionando.")))}),
+      boton("Guardar cambios", "btn-primary btn-lg btn-block", (e) => accion(e.currentTarget, async () => {
+        const hora = $("#a-hora").value || "18:30", max = String(Math.min(8, Math.max(1, +$("#a-max").value || 4)));
+        const salasVal = orden.filter((i) => activas.has(i)).join(",");
+        if (!salasVal) throw new Error("Deja al menos una sala activa.");
+        const cambios = {UPB_NOMBRE: $("#a-nombre").value.trim(), UPB_APELLIDO: $("#a-apellido").value.trim(), UPB_PROPOSITO: $("#a-motivo").value.trim(),
+          UPB_HORARIO: horario, UPB_SALAS: salasVal, UPB_AUTO_APROBAR: auto.checked ? "1" : "0", UPB_AUTO_APROBAR_BO: hora, UPB_MAX_PERSONAS: max, UPB_PAUSADO: pausa.checked ? "1" : "0"};
+        for (const [k, v] of Object.entries(cambios)) await guardarVariable(k, v, vars);
+        vars = await leerVariables();
+        if (cambios.UPB_NOMBRE) guardado.set("nombre_mostrar", `${cambios.UPB_NOMBRE} ${cambios.UPB_APELLIDO}`.trim());
+        dibujarMarco("ajustes");
+        aviso("Cambios guardados. Se usan desde la próxima corrida.", "ok");
+      }), "check"))));
+}
+
+/* ───────────────────────── vista: guía (admin) ───────────────────────── */
+async function vistaGuia(c) {
+  encabezado("Guía de instalación", "paso a paso", ["Inicio", "Guía"]);
+  const paso = (n, tipo, titulo, estado, ...cuerpo) => caja({tipo, titulo: h("span", {style: "display:inline-flex;gap:8px;align-items:center"}, h("span", {class: "paso"}, n), titulo), der: estado, cuerpo: h("div", null, ...cuerpo)});
+  const etq = (ok, txt) => h("span", {class: `etq ${ok === true ? "ok" : ok === false ? "mal" : "gris"}`}, txt || (ok === true ? "Listo" : ok === false ? "Falta" : "Revisar"));
+  const repoUrl = `https://github.com/${repo()}`;
+  const publicaRemota = await (async () => { try { const r = await fetch("clave_publica.txt?t=" + Date.now(), {cache: "no-store"}); return r.ok ? (await r.text()).trim() : ""; } catch { return ""; } })();
+  const llaveOk = !!guardado.get("privada") && !!publicaRemota && publicaRemota === guardado.get("publica");
+  const permisos = h("ul", {class: "items"});
+  const secreto = h("div");
+  const linea = (txt) => h("div", {class: "copiable"}, h("code", null, txt), boton("", "btn-default btn-sm", () => copiar(txt), "copiar", {"aria-label": "Copiar"}));
+
+  c.append(
+    paso(1, "primary", "Publicar este panel", etq(/github\.io$/.test(location.hostname)),
+      h("p", null, "En GitHub: Settings → Pages → Source: «Deploy from a branch» → rama main, carpeta /docs → Save. En uno o dos minutos el panel queda en:"),
+      linea(`https://${repo().split("/")[0]}.github.io/${repo().split("/")[1]}/`)),
+    paso(2, "primary", "Permisos del token", h("span"),
+      h("p", null, "Edita tu fine-grained token (GitHub → Settings → Developer settings → Fine-grained tokens) y dale acceso solo a este repositorio con estos permisos en «Read and write»: Actions, Variables, Issues y Contents. Metadata queda en lectura."),
+      boton("Revisar permisos", "btn-primary", (e) => accion(e.currentTarget, async () => {
+        const pruebas = [["Actions", `/actions/workflows/${WF}`], ["Variables", "/actions/variables?per_page=1"], ["Issues", "/issues?per_page=1"], ["Contents", "/contents/docs"]];
+        permisos.replaceChildren(...await Promise.all(pruebas.map(async ([n, r]) => { try { await api(r); return h("li", null, h("span", {class: "principal"}, n), etq(true, "Puede leer")); } catch (x) { return h("li", null, h("span", {class: "principal"}, n, h("br"), h("small", null, x.message)), etq(false, "Sin acceso")); } })));
+      }), "check"), permisos,
+      h("p", {class: "ayuda"}, "La escritura se comprueba al usarla: si falta, el panel te dice exactamente qué permiso agregar.")),
+    paso(3, "warning", "Llave de cifrado de las solicitudes", etq(llaveOk),
+      h("p", null, "Crea una llave en este teléfono. La parte pública se guarda en el repositorio para que otros cifren sus pedidos; la privada se queda en este teléfono y la copias una sola vez al Secret ", h("b", null, "UPB_CLAVE_PRIVADA"), " para que el bot pueda leerlos."),
+      h("div", {style: "display:flex;flex-wrap:wrap;gap:6px"},
+        boton(guardado.get("privada") ? "Crear una llave nueva" : "Crear llave", "btn-warning", (e) => accion(e.currentTarget, async () => {
+          if (guardado.get("privada") && !confirm("Una llave nueva deja ilegibles las solicitudes ya enviadas. ¿Continuar?")) return;
+          const {publica, privada} = await UPBCifrado.generarLlaves();
+          let sha; try { sha = (await api("/contents/docs/clave_publica.txt")).sha; } catch (x) { if (x.estado !== 404) throw x; }
+          await api("/contents/docs/clave_publica.txt", {metodo: "PUT", cuerpo: {message: "Llave pública para solicitudes cifradas", content: btoa(publica + "\n"), sha}});
+          guardado.set("privada", privada); guardado.set("publica", publica); _pub = publica;
+          mostrarSecreto(privada);
+          aviso("Llave creada. Ahora copia la privada al Secret UPB_CLAVE_PRIVADA.", "ok", 8000);
+        }), "llave"),
+        guardado.get("privada") ? boton("Ver llave privada", "btn-default", () => mostrarSecreto(guardado.get("privada")), "ojo") : null,
+        boton("Importar desde otro teléfono", "btn-default", () => {
+          const ta = h("textarea", {class: "control", placeholder: "Pega la llave privada"});
+          secreto.replaceChildren(ta, h("div", {style: "margin-top:6px"}, boton("Guardar en este teléfono", "btn-primary", () => { const v = ta.value.trim(); if (v.length < 500) return aviso("Eso no parece una llave privada.", "av"); guardado.set("privada", v); if (publicaRemota) guardado.set("publica", publicaRemota); aviso("Llave importada.", "ok"); secreto.replaceChildren(); })));
+        }, "copiar")),
+      secreto),
+    paso(4, "primary", "Secrets de GitHub", h("span"),
+      h("p", null, "En ", h("a", {href: `${repoUrl}/settings/secrets/actions`, target: "_blank", rel: "noopener"}, "Settings → Secrets → Actions"), " deben existir: UPB_CODIGO (tu código), UPB_NOMBRE, UPB_APELLIDO, UPB_CLAVE_PRIVADA (paso 3) y, si quieres avisos, NTFY_TOPIC.")),
+    paso(5, "info", "Arranque puntual con cron-job.org", h("span"),
+      h("p", null, "Los horarios automáticos de GitHub a veces se retrasan horas. Un disparo externo a las 17:05 y 18:05 (zona America/La_Paz) lo evita. En cron-job.org crea un trabajo con:"),
+      h("div", {class: "etiqueta"}, "URL (método POST)"), linea(`https://api.github.com/repos/${repo()}/actions/workflows/${WF}/dispatches`),
+      h("div", {class: "etiqueta"}, "Encabezados"), linea("Authorization: Bearer github_pat_…"), linea("Accept: application/vnd.github+json"), linea("X-GitHub-Api-Version: 2022-11-28"),
+      h("div", {class: "etiqueta"}, "Cuerpo"), linea('{"ref":"main"}'),
+      h("p", {class: "ayuda"}, "Para cron-job.org conviene un token aparte con solo el permiso Actions. Prueba con «Test run»: debe responder 204.")),
+    paso(6, "info", "Avisos al celular (ntfy)", h("span"),
+      h("p", null, "Instala la app ntfy, suscríbete a tu canal y ponlo en el Secret NTFY_TOPIC. Recibirás: 🟢 vigilando (desde las 19:00), ✅ reservado, ⚠️ arrancó tarde y ❌ sin sala. Si a las 19:30 no te llegó el 🟢, el bot no está corriendo: arráncalo desde Inicio.")),
+    paso(7, "success", "Compartir la página de solicitudes", h("span"),
+      h("p", null, "Pasa este enlace a tus compañeros. No necesitan token; sus datos van cifrados."),
+      linea(`${location.origin}${location.pathname}#pedir`)),
+    paso(8, "success", "Prueba final", h("span"),
+      h("p", null, "Lanza una corrida que revisa todo sin reservar nada."),
+      boton("Probar sin reservar", "btn-success", (e) => accion(e.currentTarget, async () => { await despachar({dry_run: true}); aviso("Prueba lanzada. Mírala en Inicio → Corridas recientes.", "ok"); }), "matraz")));
+
+  function mostrarSecreto(privada) {
+    secreto.replaceChildren(h("div", {class: "callout warning", style: "margin-top:10px"},
+      h("h4", null, "Llave privada"),
+      h("p", null, "Cópiala en un Secret nuevo llamado UPB_CLAVE_PRIVADA. No la compartas con nadie: quien la tenga puede leer las solicitudes."),
+      h("textarea", {class: "control", readonly: true, rows: 5}, privada),
+      h("div", {style: "display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"},
+        boton("Copiar llave", "btn-warning", () => copiar(privada, "Llave copiada."), "copiar"),
+        h("a", {class: "btn btn-default", href: `${repoUrl}/settings/secrets/actions/new`, target: "_blank", rel: "noopener"}, "Abrir Secrets"),
+        boton("Ocultar", "btn-default", () => secreto.replaceChildren(), "x"))));
+  }
+}
+
+/* ───────────────────────── vista: conectar ───────────────────────── */
+async function vistaConectar(c) {
+  encabezado("Administrar", "conectar tu token", ["Inicio", "Conectar"]);
+  const token = h("input", {class: "control", id: "c-token", type: "password", autocomplete: "off", placeholder: "github_pat_…", value: guardado.get("token")});
+  const rep = h("input", {class: "control", id: "c-repo", value: repo()});
+  c.append(h("div", {class: "fila dos"}, caja({tipo: "primary", titulo: "Tu token de GitHub", icono: "candado", cuerpo: h("div", null,
+    h("p", {style: "margin-top:0"}, "El token se guarda solo en este navegador. Nunca se sube a GitHub ni a ningún otro lado."),
+    h("div", {class: "grupo"}, h("label", {for: "c-token"}, "Fine-grained token"), token),
+    h("div", {class: "grupo"}, h("label", {for: "c-repo"}, "Repositorio"), rep)),
+    pie: [boton("Conectar", "btn-primary", (e) => accion(e.currentTarget, async () => {
+      const t = token.value.trim(); if (!/^(github_pat_|ghp_)/.test(t)) throw new Error("Eso no parece un token de GitHub (empieza con github_pat_).");
+      guardado.set("token", t); guardado.set("repo", rep.value.trim() || REPO_DEF);
+      try { await api(""); } catch (x) { guardado.set("token", ""); throw x; }
+      aviso("Conectado.", "ok"); location.hash = "#inicio";
+    }), "check"),
+    esAdmin() ? boton("Desconectar este teléfono", "btn-danger", () => { ["token", "nombre_mostrar", "pendientes"].forEach((k) => guardado.set(k, "")); aviso("Token borrado de este teléfono.", "ok"); location.hash = "#pedir"; }, "salir") : null]}),
+    caja({tipo: "info", titulo: "¿No eres el administrador?", icono: "info", cuerpo: h("p", {style: "margin:0"}, "No necesitas token para pedir una sala. ", h("a", {href: "#pedir"}, "Ir a pedir sala"), ".")})));
+}
+
+/* ───────────────────────── enrutador ───────────────────────── */
+let _timer = null;
+function temporizador(fn, ms) { clearInterval(_timer); _timer = setInterval(() => { if (document.visibilityState === "visible") fn(); }, ms); }
+const VISTAS = {pedir: vistaPedir, estado: vistaEstado, inicio: vistaInicio, tickets: vistaTickets, ajustes: vistaAjustes, guia: vistaGuia, conectar: vistaConectar};
+const SOLO_ADMIN = new Set(["inicio", "tickets", "ajustes", "guia"]);
+async function ir() {
+  clearInterval(_timer);
+  let v = location.hash.slice(1) || (esAdmin() ? "inicio" : "pedir");
+  if (!VISTAS[v]) v = esAdmin() ? "inicio" : "pedir";
+  if (SOLO_ADMIN.has(v) && !esAdmin()) v = "conectar";
+  dibujarMarco(v);
+  const c = $("#contenido"); c.replaceChildren();
+  window.scrollTo(0, 0);
+  try { await VISTAS[v](c); } catch (e) { c.append(h("div", {class: "alerta alerta-mal"}, svg("alerta"), h("div", null, e.message || String(e)))); }
+}
+window.addEventListener("hashchange", ir);
+ir();
+</script>
+</body>
+</html>

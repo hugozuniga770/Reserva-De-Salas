@@ -1,0 +1,512 @@
+<html lang="es"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reservar Sala — Estudiante</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f8;
+            min-height: 100vh;
+        }
+
+        /* Top bar */
+        .topnav {
+            background: linear-gradient(135deg, #1a1a2e, #0f3460);
+            color: white;
+            padding: 0 24px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .topnav-brand { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 700; }
+        .topnav-brand i { font-size: 20px; color: #e94560; }
+        .topnav-date { font-size: 0.85rem; color: rgba(255,255,255,0.7); }
+        .topnav-home a { color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.85rem; }
+        .topnav-home a:hover { color: white; }
+
+        /* Layout */
+        .page-wrap {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 28px 20px;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+        .calendar-col { flex: 1; min-width: 0; }
+        .form-col { width: 360px; flex-shrink: 0; }
+
+        @media(max-width: 900px) {
+            .page-wrap { flex-direction: column; }
+            .form-col { width: 100%; }
+        }
+
+        /* Panel */
+        .panel {
+            background: white;
+            border-radius: 14px;
+            padding: 28px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            margin-bottom: 20px;
+        }
+        .panel-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #1a1a2e;
+            margin-bottom: 20px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .panel-title i { color: #667eea; }
+
+        /* Form */
+        .form-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .form-ctrl {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-ctrl:focus { border-color: #667eea; }
+        .form-group { margin-bottom: 16px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+        /* Alerts */
+        .alert {
+            padding: 14px 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            display: flex; align-items: flex-start; gap: 10px;
+        }
+        .alert-success { background: #e8f8f0; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-danger  { background: #ffeef0; color: #721c24; border: 1px solid #f5c6cb; }
+
+        /* Slot grid */
+        .slot-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .slot-option { display: none; }
+        .slot-label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 10px 6px;
+            border: 2px solid #e8e8e8;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #555;
+            transition: all 0.2s;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .slot-option:checked + .slot-label { border-color: #667eea; background: #eff3ff; color: #667eea; }
+        .slot-label:hover:not(.occupied) { border-color: #667eea; background: #f8f9ff; }
+        .slot-label.occupied {
+            background: #fff0f0;
+            border-color: #fcc;
+            color: #c33;
+            cursor: not-allowed;
+        }
+        .slot-label .occ-badge {
+            font-size: 0.7rem;
+            margin-top: 2px;
+            color: #e94560;
+        }
+
+        /* Submit */
+        .btn-submit {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s, transform 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-submit:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Availability panel */
+        .avail-grid { display: flex; flex-direction: column; gap: 10px; }
+        .avail-room { display: flex; flex-direction: column; gap: 6px; }
+        .avail-room-name { font-weight: 600; color: #333; font-size: 0.88rem; }
+        .avail-slots { display: flex; flex-wrap: wrap; gap: 6px; }
+        .avail-chip {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .avail-chip.free { background: #e8f8f0; color: #28a745; }
+        .avail-chip.busy { background: #ffeef0; color: #e94560; }
+
+        /* Info bar */
+        .info-bar {
+            background: linear-gradient(135deg, #667eea20, #764ba220);
+            border: 1px solid #667eea40;
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 0.85rem;
+            color: #555;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .info-bar i { color: #667eea; }
+    </style>
+</head>
+<body><sc-wxt-panel data-wxt-shadow-root=""></sc-wxt-panel>
+    <nav class="topnav">
+        <div class="topnav-brand"><i class="fas fa-building"></i> Sistema de Reservas</div>
+        <div class="topnav-date"><i class="fas fa-calendar-day"></i> Hoy: 02/10/2026</div>
+        <div class="topnav-home"><a href="index.php"><i class="fas fa-home"></i> Inicio</a></div>
+    </nav>
+
+    <div class="page-wrap">
+        <!-- Calendario del día -->
+        <div class="calendar-col">
+            <div class="panel">
+                <div class="panel-title"><i class="fas fa-calendar-day"></i> Disponibilidad de Hoy</div>
+                <div id="calendar" class="fc fc-media-screen fc-direction-ltr fc-theme-standard" style="height: 500px;"><div class="fc-header-toolbar fc-toolbar fc-toolbar-ltr"><div class="fc-toolbar-chunk"></div><div class="fc-toolbar-chunk"><h2 class="fc-toolbar-title" id="fc-dom-1">2 de octubre de 2026</h2></div><div class="fc-toolbar-chunk"><button type="button" title="Vista del día" aria-pressed="true" class="fc-timeGridDay-button fc-button fc-button-primary fc-button-active">Día</button></div></div><div aria-labelledby="fc-dom-1" class="fc-view-harness fc-view-harness-active"><div class="fc-timegrid fc-timeGridDay-view fc-view"><table role="grid" class="fc-scrollgrid  fc-scrollgrid-liquid"><thead role="rowgroup"><tr role="presentation" class="fc-scrollgrid-section fc-scrollgrid-section-header "><th role="presentation"><div class="fc-scroller-harness"><div class="fc-scroller" style="overflow: hidden scroll;"><table role="presentation" class="fc-col-header " style="width: 498px;"><colgroup><col style="width: 26px;"></colgroup><thead role="presentation"><tr role="row"><th aria-hidden="true" class="fc-timegrid-axis"><div class="fc-timegrid-axis-frame"></div></th><th role="columnheader" class="fc-col-header-cell fc-day fc-day-fri fc-day-past" data-date="2026-10-02"><div class="fc-scrollgrid-sync-inner"><a class="fc-col-header-cell-cushion ">viernes</a></div></th></tr></thead></table></div></div></th></tr></thead><tbody role="rowgroup"><tr role="presentation" class="fc-scrollgrid-section fc-scrollgrid-section-body  fc-scrollgrid-section-liquid"><td role="presentation"><div class="fc-scroller-harness fc-scroller-harness-liquid"><div class="fc-scroller fc-scroller-liquid-absolute" style="overflow: hidden scroll;"><div class="fc-timegrid-body" style="width: 498px;"><div class="fc-timegrid-slots"><table aria-hidden="true" class="" style="width: 498px;"><colgroup><col style="width: 26px;"></colgroup><tbody><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="07:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">7</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="07:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="07:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="07:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="08:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">8</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="08:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="08:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="08:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="09:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">9</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="09:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="09:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="09:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="10:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">10</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="10:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="10:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="10:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="11:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">11</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="11:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="11:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="11:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="12:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">12</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="12:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="12:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="12:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="13:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">13</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="13:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="13:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="13:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="14:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">14</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="14:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="14:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="14:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="15:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">15</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="15:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="15:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="15:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="16:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">16</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="16:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="16:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="16:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="17:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">17</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="17:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="17:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="17:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="18:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">18</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="18:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="18:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="18:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="19:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">19</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="19:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="19:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="19:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="20:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">20</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="20:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="20:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="20:30:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-scrollgrid-shrink" data-time="21:00:00"><div class="fc-timegrid-slot-label-frame fc-scrollgrid-shrink-frame"><div class="fc-timegrid-slot-label-cushion fc-scrollgrid-shrink-cushion">21</div></div></td><td class="fc-timegrid-slot fc-timegrid-slot-lane " data-time="21:00:00"></td></tr><tr><td class="fc-timegrid-slot fc-timegrid-slot-label fc-timegrid-slot-minor" data-time="21:30:00"></td><td class="fc-timegrid-slot fc-timegrid-slot-lane fc-timegrid-slot-minor" data-time="21:30:00"></td></tr></tbody></table></div><div class="fc-timegrid-cols"><table role="presentation" style="width: 498px;"><colgroup><col style="width: 26px;"></colgroup><tbody role="presentation"><tr role="row"><td aria-hidden="true" class="fc-timegrid-col fc-timegrid-axis"><div class="fc-timegrid-col-frame"><div class="fc-timegrid-now-indicator-container"></div></div></td><td role="gridcell" class="fc-timegrid-col fc-day fc-day-fri fc-day-past" data-date="2026-10-02"><div class="fc-timegrid-col-frame"><div class="fc-timegrid-col-bg"></div><div class="fc-timegrid-col-events"><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 75% -240px 0%; z-index: 1;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Alejandro Vasquez — Sala de estudio B</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 62.5% -240px 12.5%; z-index: 2;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Ariana Alarcon — Sala de estudio D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 50% -240px 25%; z-index: 3;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Ashley Cuéllar — Sala de lectura A</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 37.5% -240px; z-index: 4;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(253, 126, 20); background-color: rgb(253, 126, 20);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Aurora Cuellar — Sala de estudio H</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 25% -240px 50%; z-index: 5;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(111, 66, 193); background-color: rgb(111, 66, 193);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Daniel Dupleich — Sala de estudio F</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 12.5% -240px 62.5%; z-index: 6;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(40, 167, 69); background-color: rgb(40, 167, 69);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Isis Hurtado — Sala de estudio G</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 0% -240px 75%; z-index: 7;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(32, 201, 151); background-color: rgb(32, 201, 151);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Matheo Oliva — Sala de estudio C</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 144px 0% -240px 87.5%; z-index: 8;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">10:00 - 12:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Meredith S — Sala de lectura D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 75% -348px 0%; z-index: 1;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Ariana Alarcon — Sala de estudio B</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 62.5% -348px 12.5%; z-index: 2;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(111, 66, 193); background-color: rgb(111, 66, 193);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Daniel Dupleich — Sala de estudio F</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 50% -348px 25%; z-index: 3;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(253, 126, 20); background-color: rgb(253, 126, 20);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">David Miranda — Sala de estudio H</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 37.5% -348px; z-index: 4;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Gonzalo Cárdenas — Sala de lectura A</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 25% -348px 50%; z-index: 5;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(40, 167, 69); background-color: rgb(40, 167, 69);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Luanda Campos — Sala de estudio G</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 12.5% -348px 62.5%; z-index: 6;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(32, 201, 151); background-color: rgb(32, 201, 151);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Matheo Oliva — Sala de estudio C</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 0% -348px 75%; z-index: 7;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Meredith S — Sala de lectura D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 252px 0% -348px 87.5%; z-index: 8;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">12:15 - 14:15</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Nixy Valle — Sala de estudio D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 75% -456px 0%; z-index: 1;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Ariana Alarcon — Sala de estudio B</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 62.5% -456px 12.5%; z-index: 2;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(253, 126, 20); background-color: rgb(253, 126, 20);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Ignacio Stohmann — Sala de estudio H</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 50% -456px 25%; z-index: 3;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Meredith S — Sala de lectura D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 37.5% -456px; z-index: 4;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Nelvy Añez — Sala de lectura A</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 25% -456px 50%; z-index: 5;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(32, 201, 151); background-color: rgb(32, 201, 151);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">PATRICIA ALVAREZ — Sala de estudio C</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 12.5% -456px 62.5%; z-index: 6;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(111, 66, 193); background-color: rgb(111, 66, 193);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Patricia Alvarez — Sala de estudio F</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 0% -456px 75%; z-index: 7;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Rebeca Moraga — Sala de estudio D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 360px 0% -456px 87.5%; z-index: 8;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(40, 167, 69); background-color: rgb(40, 167, 69);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">14:30 - 16:30</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Ruth O — Sala de estudio G</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 75% -564px 0%; z-index: 1;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Daniel Dupleich — Sala de estudio B</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 62.5% -564px 12.5%; z-index: 2;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(253, 126, 20); background-color: rgb(253, 126, 20);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Eduardo Mariscal — Sala de estudio H</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 50% -564px 25%; z-index: 3;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(32, 201, 151); background-color: rgb(32, 201, 151);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Matheo Oliva — Sala de estudio C</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 37.5% -564px; z-index: 4;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Meredith S — Sala de lectura D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 25% -564px 50%; z-index: 5;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Nelvy Añez — Sala de lectura A</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 12.5% -564px 62.5%; z-index: 6;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(40, 167, 69); background-color: rgb(40, 167, 69);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Noelia Pinto — Sala de estudio G</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 0% -564px 75%; z-index: 7;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(111, 66, 193); background-color: rgb(111, 66, 193);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Patricia Alvarez — Sala de estudio F</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 468px 0% -564px 87.5%; z-index: 8;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">16:45 - 18:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Rebeca Moraga — Sala de estudio D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 71.4286% -132px 0%; z-index: 1;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(111, 66, 193); background-color: rgb(111, 66, 193);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Andrés Bauer — Sala de estudio F</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 57.1429% -132px 14.2857%; z-index: 2;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(233, 69, 96); background-color: rgb(233, 69, 96);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Anita Roca Kreidstein — Sala de lectura A</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 42.8571% -132px 28.5714%; z-index: 3;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Jose Lopez — Sala de estudio D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 28.5714% -132px 42.8571%; z-index: 4;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(40, 167, 69); background-color: rgb(40, 167, 69);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Luna Calizaya — Sala de estudio G</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 14.2857% -132px 57.1429%; z-index: 5;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Meredith S — Sala de lectura D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 0% -132px 71.4286%; z-index: 6;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(32, 201, 151); background-color: rgb(32, 201, 151);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Natalia Moreno — Sala de estudio C</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 36px 0% -132px 85.7143%; z-index: 7;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(253, 126, 20); background-color: rgb(253, 126, 20);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">07:45 - 09:45</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Rania Becerra — Sala de estudio H</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 576px 33.3333% -672px 0%; z-index: 1;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(32, 201, 151); background-color: rgb(32, 201, 151);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">19:00 - 21:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Matheo Oliva — Sala de estudio C</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 576px 0% -672px 33.3333%; z-index: 2;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(102, 126, 234); background-color: rgb(102, 126, 234);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">19:00 - 21:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Meredith S — Sala de lectura D</div></div></div></div></a></div><div class="fc-timegrid-event-harness fc-timegrid-event-harness-inset" style="inset: 576px 0% -672px 66.6667%; z-index: 3;"><a class="fc-timegrid-event fc-v-event fc-event fc-event-start fc-event-end fc-event-past" tabindex="0" style="border-color: rgb(111, 66, 193); background-color: rgb(111, 66, 193);"><div class="fc-event-main"><div class="fc-event-main-frame"><div class="fc-event-time">19:00 - 21:00</div><div class="fc-event-title-container"><div class="fc-event-title fc-sticky">Patricia Alvarez — Sala de estudio F</div></div></div></div></a></div></div><div class="fc-timegrid-col-events"></div><div class="fc-timegrid-now-indicator-container"></div></div></td></tr></tbody></table></div></div></div></div></td></tr></tbody></table></div></div></div>
+            </div>
+
+            <!-- Tabla de disponibilidad rápida -->
+            <div class="panel">
+                <div class="panel-title"><i class="fas fa-table"></i> Resumen de Disponibilidad</div>
+                <div class="avail-grid">
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de estudio B</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip free">
+                                        07:45 – 09:45 ✓                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip free">
+                                        19:00 – 21:00 ✓                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de estudio C</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        19:00 – 21:00 ✗                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de estudio D</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip free">
+                                        19:00 – 21:00 ✓                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de estudio F</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        19:00 – 21:00 ✗                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de estudio G</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip free">
+                                        19:00 – 21:00 ✓                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de estudio H</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip free">
+                                        19:00 – 21:00 ✓                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de lectura A</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip free">
+                                        19:00 – 21:00 ✓                                    </span>
+                                                            </div>
+                        </div>
+                                            <div class="avail-room">
+                            <div class="avail-room-name">Sala de lectura D</div>
+                            <div class="avail-slots">
+                                                                                                        <span class="avail-chip busy">
+                                        07:45 – 09:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        10:00 – 12:00 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        12:15 – 14:15 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        14:30 – 16:30 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        16:45 – 18:45 ✗                                    </span>
+                                                                                                        <span class="avail-chip busy">
+                                        19:00 – 21:00 ✗                                    </span>
+                                                            </div>
+                        </div>
+                                    </div>
+            </div>
+        </div>
+
+        <!-- Formulario -->
+        <div class="form-col">
+            <div class="panel">
+                <div class="panel-title"><i class="fas fa-calendar-plus"></i> Reservar para Hoy</div>
+
+                <div class="info-bar">
+                    <i class="fas fa-info-circle"></i>
+                    Solo se pueden reservar salas para el día de hoy. Máximo 2 horas por turno.
+                </div>
+
+                                
+                <form method="POST" action="">
+                    <div class="form-group">
+                        <label class="form-label">Sala</label>
+                        <select name="room" id="roomSelect" class="form-ctrl" required="" onchange="updateSlots()">
+                            <option value="">— Seleccionar —</option>
+                                                            <option value="15" data-desc="" data-rid="15">
+                                    Sala de estudio B                                </option>
+                                                            <option value="3" data-desc="" data-rid="3">
+                                    Sala de estudio C                                </option>
+                                                            <option value="6" data-desc="" data-rid="6">
+                                    Sala de estudio D                                </option>
+                                                            <option value="8" data-desc="" data-rid="8">
+                                    Sala de estudio F                                </option>
+                                                            <option value="9" data-desc="" data-rid="9">
+                                    Sala de estudio G                                </option>
+                                                            <option value="14" data-desc="" data-rid="14">
+                                    Sala de estudio H                                </option>
+                                                            <option value="10" data-desc="" data-rid="10">
+                                    Sala de lectura A                                </option>
+                                                            <option value="13" data-desc="" data-rid="13">
+                                    Sala de lectura D                                </option>
+                                                    </select>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Nombre</label>
+                            <input type="text" name="first_name" class="form-ctrl" required="" value="">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Apellido</label>
+                            <input type="text" name="last_name" class="form-ctrl" required="" value="">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Código de estudiante</label>
+                        <input type="text" name="code" class="form-ctrl" required="" value="">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Seleccionar Horario</label>
+                        <div class="slot-grid" id="slotGrid">
+                                                            <div>
+                                    <input type="radio" name="schedule" id="slot_94b8b48865360042a741a450c6441be0" value="7:45-9:45" class="slot-option" required="" disabled="">
+                                    <label for="slot_94b8b48865360042a741a450c6441be0" class="slot-label occupied">
+                                        <span>07:45 – 09:45</span>
+                                                                            <span class="occ-badge">Ocupado</span></label>
+                                </div>
+                                                            <div>
+                                    <input type="radio" name="schedule" id="slot_cc9dc7dfdbf99c1d42f944c656c62e4d" value="10:00-12:00" class="slot-option" required="" disabled="">
+                                    <label for="slot_cc9dc7dfdbf99c1d42f944c656c62e4d" class="slot-label occupied">
+                                        <span>10:00 – 12:00</span>
+                                                                            <span class="occ-badge">Ocupado</span></label>
+                                </div>
+                                                            <div>
+                                    <input type="radio" name="schedule" id="slot_b0030e1d389405aae784568ad8e26553" value="12:15-14:15" class="slot-option" required="" disabled="">
+                                    <label for="slot_b0030e1d389405aae784568ad8e26553" class="slot-label occupied">
+                                        <span>12:15 – 14:15</span>
+                                                                            <span class="occ-badge">Ocupado</span></label>
+                                </div>
+                                                            <div>
+                                    <input type="radio" name="schedule" id="slot_fc5e47c4011ddab1419ef6e9da33154c" value="14:30-16:30" class="slot-option" required="" disabled="">
+                                    <label for="slot_fc5e47c4011ddab1419ef6e9da33154c" class="slot-label occupied">
+                                        <span>14:30 – 16:30</span>
+                                                                            <span class="occ-badge">Ocupado</span></label>
+                                </div>
+                                                            <div>
+                                    <input type="radio" name="schedule" id="slot_e7a3d271d18d86dc1ab2bca33b63f319" value="16:45-18:45" class="slot-option" required="" disabled="">
+                                    <label for="slot_e7a3d271d18d86dc1ab2bca33b63f319" class="slot-label occupied">
+                                        <span>16:45 – 18:45</span>
+                                                                            <span class="occ-badge">Ocupado</span></label>
+                                </div>
+                                                            <div>
+                                    <input type="radio" name="schedule" id="slot_e93ad1f8c976ce25fcaaa7539e2233dd" value="19:00-21:00" class="slot-option" required="" disabled="">
+                                    <label for="slot_e93ad1f8c976ce25fcaaa7539e2233dd" class="slot-label occupied">
+                                        <span>19:00 – 21:00</span>
+                                                                            <span class="occ-badge">Ocupado</span></label>
+                                </div>
+                                                    </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Detalle de la actividad</label>
+                        <textarea name="purpose" class="form-ctrl" rows="3" required="" placeholder="Ej: Estudio grupal, preparación de examen..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn-submit">
+                        <i class="fas fa-save"></i> Confirmar Reserva
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/main.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.10.1/locales/es.min.js"></script>
+    <script>
+        const occupied = {"8":{"16:45-18:45":true,"19:00-21:00":true,"14:30-16:30":true,"10:00-12:00":true,"12:15-14:15":true,"7:45-9:45":true},"3":{"16:45-18:45":true,"10:00-12:00":true,"12:15-14:15":true,"19:00-21:00":true,"7:45-9:45":true,"14:30-16:30":true},"15":{"10:00-12:00":true,"16:45-18:45":true,"12:15-14:15":true,"14:30-16:30":true},"9":{"12:15-14:15":true,"14:30-16:30":true,"10:00-12:00":true,"16:45-18:45":true,"7:45-9:45":true},"14":{"7:45-9:45":true,"10:00-12:00":true,"12:15-14:15":true,"14:30-16:30":true,"16:45-18:45":true},"6":{"10:00-12:00":true,"12:15-14:15":true,"14:30-16:30":true,"16:45-18:45":true,"7:45-9:45":true},"10":{"12:15-14:15":true,"7:45-9:45":true,"10:00-12:00":true,"14:30-16:30":true,"16:45-18:45":true},"13":{"7:45-9:45":true,"10:00-12:00":true,"12:15-14:15":true,"14:30-16:30":true,"16:45-18:45":true,"19:00-21:00":true}};
+        const slots    = ["7:45-9:45","10:00-12:00","12:15-14:15","14:30-16:30","16:45-18:45","19:00-21:00"];
+        const slotMap  = {"7:45-9:45":{"start":"07:45:00","end":"09:45:00","label":"07:45 \u2013 09:45"},"10:00-12:00":{"start":"10:00:00","end":"12:00:00","label":"10:00 \u2013 12:00"},"12:15-14:15":{"start":"12:15:00","end":"14:15:00","label":"12:15 \u2013 14:15"},"14:30-16:30":{"start":"14:30:00","end":"16:30:00","label":"14:30 \u2013 16:30"},"16:45-18:45":{"start":"16:45:00","end":"18:45:00","label":"16:45 \u2013 18:45"},"19:00-21:00":{"start":"19:00:00","end":"21:00:00","label":"19:00 \u2013 21:00"}};
+
+        function updateSlots() {
+            const sel = document.getElementById('roomSelect');
+            const rid = sel.options[sel.selectedIndex]?.dataset.rid;
+            const labels = document.querySelectorAll('.slot-label');
+            const inputs = document.querySelectorAll('.slot-option');
+
+            inputs.forEach((inp, i) => {
+                const key  = inp.value;
+                const busy = rid && occupied[rid] && occupied[rid][key];
+                inp.disabled = !!busy;
+                labels[i].classList.toggle('occupied', !!busy);
+                if (busy && inp.checked) inp.checked = false;
+
+                // Update occupied badge
+                let badge = labels[i].querySelector('.occ-badge');
+                if (busy && !badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'occ-badge';
+                    badge.textContent = 'Ocupado';
+                    labels[i].appendChild(badge);
+                } else if (!busy && badge) {
+                    badge.remove();
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = '2026-10-02';
+            const cal = new FullCalendar.Calendar(document.getElementById('calendar'), {
+                initialView: 'timeGridDay',
+                initialDate: today,
+                headerToolbar: {
+                    left: '',
+                    center: 'title',
+                    right: 'timeGridDay'
+                },
+                locale: 'es',
+                timeZone: 'local',
+                slotMinTime: '07:00:00',
+                slotMaxTime: '22:00:00',
+                allDaySlot: false,
+                events: [{"title":"Jose Lopez \u2014 Sala de estudio D","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"7:45-9:45","room":"Sala de estudio D"}},{"title":"Anita Roca Kreidstein \u2014 Sala de lectura A","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"7:45-9:45","room":"Sala de lectura A"}},{"title":"Luna Calizaya \u2014 Sala de estudio G","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#28a745","borderColor":"#28a745","extendedProps":{"slot":"7:45-9:45","room":"Sala de estudio G"}},{"title":"Rania Becerra \u2014 Sala de estudio H","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#fd7e14","borderColor":"#fd7e14","extendedProps":{"slot":"7:45-9:45","room":"Sala de estudio H"}},{"title":"Natalia Moreno \u2014 Sala de estudio C","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#20c997","borderColor":"#20c997","extendedProps":{"slot":"7:45-9:45","room":"Sala de estudio C"}},{"title":"Andr\u00e9s Bauer \u2014 Sala de estudio F","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#6f42c1","borderColor":"#6f42c1","extendedProps":{"slot":"7:45-9:45","room":"Sala de estudio F"}},{"title":"Meredith S \u2014 Sala de lectura D","start":"2026-10-02 07:45:00","end":"2026-10-02 09:45:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"7:45-9:45","room":"Sala de lectura D"}},{"title":"Aurora Cuellar \u2014 Sala de estudio H","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#fd7e14","borderColor":"#fd7e14","extendedProps":{"slot":"10:00-12:00","room":"Sala de estudio H"}},{"title":"Alejandro Vasquez \u2014 Sala de estudio B","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"10:00-12:00","room":"Sala de estudio B"}},{"title":"Isis Hurtado \u2014 Sala de estudio G","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#28a745","borderColor":"#28a745","extendedProps":{"slot":"10:00-12:00","room":"Sala de estudio G"}},{"title":"Matheo Oliva \u2014 Sala de estudio C","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#20c997","borderColor":"#20c997","extendedProps":{"slot":"10:00-12:00","room":"Sala de estudio C"}},{"title":"Daniel Dupleich \u2014 Sala de estudio F","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#6f42c1","borderColor":"#6f42c1","extendedProps":{"slot":"10:00-12:00","room":"Sala de estudio F"}},{"title":"Meredith S \u2014 Sala de lectura D","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"10:00-12:00","room":"Sala de lectura D"}},{"title":"Ariana Alarcon \u2014 Sala de estudio D","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"10:00-12:00","room":"Sala de estudio D"}},{"title":"Ashley Cu\u00e9llar \u2014 Sala de lectura A","start":"2026-10-02 10:00:00","end":"2026-10-02 12:00:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"10:00-12:00","room":"Sala de lectura A"}},{"title":"Matheo Oliva \u2014 Sala de estudio C","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#20c997","borderColor":"#20c997","extendedProps":{"slot":"12:15-14:15","room":"Sala de estudio C"}},{"title":"Daniel Dupleich \u2014 Sala de estudio F","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#6f42c1","borderColor":"#6f42c1","extendedProps":{"slot":"12:15-14:15","room":"Sala de estudio F"}},{"title":"Meredith S \u2014 Sala de lectura D","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"12:15-14:15","room":"Sala de lectura D"}},{"title":"Nixy Valle \u2014 Sala de estudio D","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"12:15-14:15","room":"Sala de estudio D"}},{"title":"Gonzalo C\u00e1rdenas \u2014 Sala de lectura A","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"12:15-14:15","room":"Sala de lectura A"}},{"title":"David Miranda \u2014 Sala de estudio H","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#fd7e14","borderColor":"#fd7e14","extendedProps":{"slot":"12:15-14:15","room":"Sala de estudio H"}},{"title":"Ariana Alarcon \u2014 Sala de estudio B","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"12:15-14:15","room":"Sala de estudio B"}},{"title":"Luanda Campos \u2014 Sala de estudio G","start":"2026-10-02 12:15:00","end":"2026-10-02 14:15:00","backgroundColor":"#28a745","borderColor":"#28a745","extendedProps":{"slot":"12:15-14:15","room":"Sala de estudio G"}},{"title":"Patricia Alvarez \u2014 Sala de estudio F","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#6f42c1","borderColor":"#6f42c1","extendedProps":{"slot":"14:30-16:30","room":"Sala de estudio F"}},{"title":"Meredith S \u2014 Sala de lectura D","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"14:30-16:30","room":"Sala de lectura D"}},{"title":"Rebeca Moraga \u2014 Sala de estudio D","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"14:30-16:30","room":"Sala de estudio D"}},{"title":"Nelvy A\u00f1ez \u2014 Sala de lectura A","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"14:30-16:30","room":"Sala de lectura A"}},{"title":"Ignacio Stohmann \u2014 Sala de estudio H","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#fd7e14","borderColor":"#fd7e14","extendedProps":{"slot":"14:30-16:30","room":"Sala de estudio H"}},{"title":"Ariana Alarcon \u2014 Sala de estudio B","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"14:30-16:30","room":"Sala de estudio B"}},{"title":"Ruth O \u2014 Sala de estudio G","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#28a745","borderColor":"#28a745","extendedProps":{"slot":"14:30-16:30","room":"Sala de estudio G"}},{"title":"PATRICIA ALVAREZ \u2014 Sala de estudio C","start":"2026-10-02 14:30:00","end":"2026-10-02 16:30:00","backgroundColor":"#20c997","borderColor":"#20c997","extendedProps":{"slot":"14:30-16:30","room":"Sala de estudio C"}},{"title":"Rebeca Moraga \u2014 Sala de estudio D","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"16:45-18:45","room":"Sala de estudio D"}},{"title":"Nelvy A\u00f1ez \u2014 Sala de lectura A","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"16:45-18:45","room":"Sala de lectura A"}},{"title":"Eduardo Mariscal \u2014 Sala de estudio H","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#fd7e14","borderColor":"#fd7e14","extendedProps":{"slot":"16:45-18:45","room":"Sala de estudio H"}},{"title":"Daniel Dupleich \u2014 Sala de estudio B","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#e94560","borderColor":"#e94560","extendedProps":{"slot":"16:45-18:45","room":"Sala de estudio B"}},{"title":"Noelia Pinto \u2014 Sala de estudio G","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#28a745","borderColor":"#28a745","extendedProps":{"slot":"16:45-18:45","room":"Sala de estudio G"}},{"title":"Matheo Oliva \u2014 Sala de estudio C","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#20c997","borderColor":"#20c997","extendedProps":{"slot":"16:45-18:45","room":"Sala de estudio C"}},{"title":"Patricia Alvarez \u2014 Sala de estudio F","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#6f42c1","borderColor":"#6f42c1","extendedProps":{"slot":"16:45-18:45","room":"Sala de estudio F"}},{"title":"Meredith S \u2014 Sala de lectura D","start":"2026-10-02 16:45:00","end":"2026-10-02 18:45:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"16:45-18:45","room":"Sala de lectura D"}},{"title":"Matheo Oliva \u2014 Sala de estudio C","start":"2026-10-02 19:00:00","end":"2026-10-02 21:00:00","backgroundColor":"#20c997","borderColor":"#20c997","extendedProps":{"slot":"19:00-21:00","room":"Sala de estudio C"}},{"title":"Patricia Alvarez \u2014 Sala de estudio F","start":"2026-10-02 19:00:00","end":"2026-10-02 21:00:00","backgroundColor":"#6f42c1","borderColor":"#6f42c1","extendedProps":{"slot":"19:00-21:00","room":"Sala de estudio F"}},{"title":"Meredith S \u2014 Sala de lectura D","start":"2026-10-02 19:00:00","end":"2026-10-02 21:00:00","backgroundColor":"#667eea","borderColor":"#667eea","extendedProps":{"slot":"19:00-21:00","room":"Sala de lectura D"}}],
+                eventTimeFormat: { hour: '2-digit', minute: '2-digit', meridiem: false },
+                height: 500,
+                eventClick: function(info) {
+                    const p = info.event.extendedProps;
+                    alert('📍 ' + p.room + '\n🕐 ' + p.slot + '\n👤 ' + info.event.title);
+                }
+            });
+            cal.render();
+        });
+    </script>
+
+
+</body></html>

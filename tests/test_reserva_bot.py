@@ -152,6 +152,7 @@ def servidor():
 def config(url, **kw):
     base = dict(nombre="Hugo Rafael", apellido="Zúñiga Daza", codigo="95503", salas=["8"],
                 horario="12:15-14:15", url=url, max_segundos=3, intervalo=0.05, intervalo_rafaga=0.02,
+                intervalo_medio=0.03,
                 intervalo_espera=0.05, pausa_verificacion=0.02,
                 reloj=lambda: datetime(2026, 10, 23, 9, 0, tzinfo=rb.BO_TZ))  # 09:00 BO, lejos de la apertura
     base.update(kw)
@@ -367,3 +368,83 @@ def test_espera_la_apertura_de_las_20_y_reserva_el_dia_siguiente(servidor, capsy
     assert rb.Bot(config(url, reloj=en_ventana, max_segundos=5)).ejecutar() == 0
     assert len(est.posts) == 1 and est.hoy == date(2026, 10, 24)
     assert "Ya tenías la reserva" in capsys.readouterr().out
+
+
+# ───────────────────────── arranque tardío / fin por reloj ─────────────────────────
+
+def test_fin_por_reloj_no_depende_de_la_hora_de_arranque():
+    bot = rb.Bot(config("http://x"))
+    temprano = datetime(2026, 11, 4, 15, 47, tzinfo=rb.BO_TZ)
+    assert bot.fin_por_reloj(temprano) == datetime(2026, 11, 4, 21, 15, tzinfo=rb.BO_TZ)
+    assert rb.Bot(config("http://x", hasta_bo="")).fin_por_reloj(temprano) is None
+
+
+def test_arranque_tardio_sin_reserva_avisa_y_termina_en_rojo(servidor, capsys):
+    """Lo que pasó en la vida real: GitHub arrancó el bot a las 22:37 BO."""
+    est, url = servidor("normal")
+    est.reservar("Otra Persona", "8", "12:15-14:15")
+    est.reservar("Otra Persona", "6", "12:15-14:15")
+    est.reservar("Otra Persona", "15", "12:15-14:15")
+    est.reservar("Otra Persona", "3", "12:15-14:15")
+    tarde = lambda: datetime(2026, 11, 4, 22, 37, tzinfo=rb.BO_TZ)
+    assert rb.Bot(config(url, reloj=tarde, salas=["8", "6", "15", "3"])).ejecutar() == rb.EXIT_TARDE
+    salida = capsys.readouterr().out
+    assert "arrancó tarde" in salida and "::error::" in salida
+    assert est.posts == []
+
+
+def test_arranque_tardio_igual_toma_una_sala_si_esta_libre(servidor, capsys):
+    est, url = servidor("normal")
+    tarde = lambda: datetime(2026, 11, 4, 20, 40, tzinfo=rb.BO_TZ)  # tarde, pero antes de las 21:15
+    assert rb.Bot(config(url, reloj=tarde)).ejecutar() == 0
+    assert len(est.posts) == 1
+    assert "arrancó tarde" in capsys.readouterr().out
+
+
+def test_cola_despues_de_las_21_15_con_reserva_hecha_sale_callado(servidor, capsys):
+    est, url = servidor("normal")
+    est.reservar("Hugo Rafael Zúñiga Daza", "8", "12:15-14:15")
+    tarde = lambda: datetime(2026, 11, 4, 21, 20, tzinfo=rb.BO_TZ)
+    assert rb.Bot(config(url, reloj=tarde)).ejecutar() == 0
+    salida = capsys.readouterr().out
+    assert "Ya tenías la reserva" in salida and "arrancó tarde" not in salida
+    assert est.posts == []
+
+
+def test_cambio_de_dia_queda_registrado_con_hora(servidor):
+    est, url = servidor("normal")
+    est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")
+    est.cambiar_dia_tras_gets = 4
+    bot = rb.Bot(config(url, reloj=lambda: datetime(2026, 10, 23, 19, 59, tzinfo=rb.BO_TZ), max_segundos=3))
+    assert bot.ejecutar() == 0
+    assert any("El servidor cambió a 2026-10-24" in l for l in bot.resumen)
+    assert any("después de detectar el cambio de día" in l for l in bot.resumen)
+
+
+def test_workflow_bien_configurado():
+    """Evita repetir errores: cron en :00/:30, un solo arranque, o timeout menor al tope."""
+    import re as _re
+    yml = (RAIZ / ".github" / "workflows" / "reservar.yml").read_text(encoding="utf-8")
+    crons = _re.findall(r"cron:\s*'(\d+) (\d+) \* \* \*'", yml)
+    assert len(crons) >= 3, "pon varios arranques de respaldo"
+    for minuto, hora_utc in crons:
+        assert int(minuto) not in (0, 30), "evita :00 y :30 (GitHub se satura y retrasa)"
+        hora_bo = (int(hora_utc) - 4) % 24
+        assert 15 <= hora_bo <= 18, f"arranque {hora_utc}:{minuto} UTC fuera de 15:00-18:59 BO"
+    assert "UPB_HASTA_BO" in yml and "cancel-in-progress: false" in yml
+    timeout = int(_re.search(r"timeout-minutes:\s*(\d+)", yml).group(1))
+    tope = int(_re.search(r"UPB_MAX_MINUTOS:.*'(\d+)'", yml).group(1))
+    assert tope < timeout <= 360
+    # el arranque más temprano + tope debe llegar a las 21:15 BO
+    primero = min((int(h) - 4) % 24 * 60 + int(m) for m, h in crons)
+    assert primero + tope >= 21 * 60 + 15
+
+
+def test_workflow_tickets_en_carriles_propios():
+    """Cada ticket en su propio grupo de concurrencia (no queda 'queued' detrás de tu corrida)
+    y siempre se libera si su corrida se corta."""
+    yml = (RAIZ / ".github" / "workflows" / "reservar.yml").read_text(encoding="utf-8")
+    assert "format('upb-ticket-{0}', inputs.ticket)" in yml and "'reserva-sala-upb'" in yml
+    assert "actions: write" in yml and "issues: write" in yml
+    assert "if: always() && inputs.ticket != ''" in yml and "--remove-label en-curso" in yml
+    assert "run-name:" in yml and "Solicitud #{0}" in yml   # el estado público se ve sin datos personales

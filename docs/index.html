@@ -385,7 +385,43 @@ async function api(ruta, {metodo = "GET", cuerpo, conToken = true} = {}) {
   if (!r.ok) throw new ErrorAPI(r.status, explicar(r.status, datos && datos.message, ruta));
   return datos;
 }
-const corridas = () => api(`/actions/workflows/${WF}/runs?per_page=40`).then((d) => d.workflow_runs || []);
+// Las corridas con evento «push» no son reales: GitHub las crea, fallidas, cuando el archivo del workflow
+// es inválido (pasó el 05/11 antes de la v4.1). Este workflow no se dispara con push, así que se ocultan.
+const corridas = () => api(`/actions/workflows/${WF}/runs?per_page=40`).then((d) => (d.workflow_runs || []).filter((r) => r.event !== "push"));
+/* Resultado de cada corrida: el bot escribe un código y el workflow ejecuta el paso «Resultado: <código>».
+   Mantener sincronizado con RESULTADOS en reserva_bot.py y con reservar.yml. */
+const RESULTADO_VISTA = {
+  "reservada": ["Reservada ✅", "ok"],
+  "ya-la-tenia": ["Ya la tenías", "azul"],
+  "no-se-libero": ["No se liberó", "av"],
+  "pendiente": ["Sin sala aún: se relanza", "av"],
+  "nada": ["Nada que hacer", "gris"],
+  "prueba": ["Prueba OK", "info"],
+  "descartada": ["Solicitud descartada", "mal"],
+  "inactivo": ["Solicitud ya no activa", "gris"],
+  "tarde": ["Arrancó tarde", "mal"],
+  "error": ["Con error", "mal"],
+};
+const _resultados = new Map();
+async function resultadoDe(r) {
+  if (activa(r)) return r.status === "in_progress" ? ["En progreso: vigilando", "ok"] : ["En cola", "info"];
+  if (r.conclusion === "cancelled") return ["Cancelada", "gris"];
+  if (r.conclusion === "skipped") return ["En pausa", "gris"];
+  if (!_resultados.has(r.id)) {
+    try {
+      const d = await api(`/actions/runs/${r.id}/jobs?per_page=10`);
+      let codigo = null;
+      for (const j of d.jobs || []) for (const paso of j.steps || []) {
+        const m = /^Resultado: ([a-z-]+)$/.exec(paso.name || "");
+        if (m && paso.conclusion === "success") codigo = m[1];
+      }
+      _resultados.set(r.id, codigo);  // una corrida terminada ya no cambia: se guarda
+    } catch { return r.conclusion === "success" ? ["Terminó bien", "azul"] : ["Con error", "mal"]; }
+  }
+  const c = _resultados.get(r.id);
+  if (c && RESULTADO_VISTA[c]) return RESULTADO_VISTA[c];
+  return r.conclusion === "success" ? ["Terminó bien", "azul"] : ["Con error", "mal"];  // corridas antiguas, sin código
+}
 const activa = (r) => ["queued", "in_progress", "waiting", "pending", "requested"].includes(r.status);
 const nTicketDeCorrida = (r) => +((r.display_title || r.name || "").match(/^Solicitud #(\d+)/) || [])[1] || 0;
 const esTuya = (r) => !nTicketDeCorrida(r);
@@ -776,17 +812,25 @@ async function vistaInicio(c) {
           pie: bot.run ? "Ver registro" : null, alPie: () => bot.run && window.open(bot.run.html_url, "_blank")}),
         cuadro({color: "amarillo", titulo: String(tickets.length), texto: pend ? `Solicitudes · ${pend} sin revisar` : "Solicitudes abiertas", icono: "usuarios", pie: "Revisar", alPie: () => (location.hash = "#tickets")}),
         cuadro({color: "morado", titulo: salasTxt, texto: `Tu horario: ${fmtH(vars.UPB_HORARIO || "12:15-14:15")}`, icono: "cal", pie: "Cambiar", alPie: () => (location.hash = "#ajustes")}))].filter(Boolean));
+    const ultima = runs.find((r) => esTuya(r) && !activa(r) && (r.display_title || "") === "Tu reserva" && r.conclusion !== "cancelled");
+    if (ultima) {
+      const [texto, col] = await resultadoDe(ultima);
+      const clase = {ok: "alerta-ok", av: "alerta-av", mal: "alerta-mal"}[col] || "alerta-info";
+      zona.prepend(h("div", {class: `alerta ${clase}`}, svg(col === "ok" ? "check" : col === "mal" ? "alerta" : "info"),
+        h("div", null, h("b", null, "Tu última corrida: "), `${texto} `, h("small", null, `(${horaBO(ultima.run_started_at || ultima.created_at)})`), " ",
+          h("a", {href: ultima.html_url, target: "_blank", rel: "noopener"}, "ver registro"))));
+    }
     const tuya = laActiva(runs.filter((r) => esTuya(r) && activa(r)));
     acciones.replaceChildren(caja({tipo: "primary", titulo: "Acciones", icono: "play", cuerpo: h("div", {style: "display:grid;gap:8px"},
       boton("Correr bot ahora", "btn-primary btn-lg btn-block", (e) => correr(e.currentTarget, {}), "play"),
       boton("Probar sin reservar", "btn-default btn-block", (e) => correr(e.currentTarget, {dry_run: "true"}), "matraz"),
       tuya ? boton("Detener tu corrida", "btn-danger btn-block", (e) => accion(e.currentTarget, async () => { await api(`/actions/runs/${tuya.id}/cancel`, {metodo: "POST"}); aviso("Corrida detenida.", "ok"); setTimeout(cargar, 3000); }), "stop") : null,
       h("p", {class: "ayuda", style: "margin:4px 0 0"}, "Fuera de la noche (15:00–21:15) «Correr bot ahora» vigila 60 minutos buscando cancelaciones."))}));
+    const etiquetas = await Promise.all(runs.slice(0, 10).map(resultadoDe));
     lista.replaceChildren(caja({tipo: "info", titulo: "Corridas recientes", icono: "lista", der: boton("", "btn-default btn-sm", () => cargar(), "recargar", {"aria-label": "Actualizar"}),
-      cuerpo: runs.length ? h("ul", {class: "items"}, runs.slice(0, 10).map((r) => {
+      cuerpo: runs.length ? h("ul", {class: "items"}, runs.slice(0, 10).map((r, i) => {
         const n = nTicketDeCorrida(r);
-        const [t, col] = activa(r) ? (r.status === "in_progress" ? ["Corriendo", "ok"] : ["En cola", "info"]) :
-          r.conclusion === "success" ? ["Terminó bien", "azul"] : r.conclusion === "cancelled" ? ["Cancelada", "gris"] : r.conclusion === "skipped" ? ["En pausa", "gris"] : ["Con error", "mal"];
+        const [t, col] = etiquetas[i];
         return h("li", null, h("div", {class: "principal"}, h("b", null, n ? `Solicitud #${n}` : (r.display_title || "Tu reserva")),
           h("small", null, `${horaBO(r.run_started_at || r.created_at)} · ${r.event === "schedule" ? "automática" : r.event === "workflow_dispatch" ? "manual" : r.event}`)),
           h("span", {class: `etq ${col}`}, t), h("a", {class: "btn btn-default btn-sm", href: r.html_url, target: "_blank", rel: "noopener"}, "Ver"));

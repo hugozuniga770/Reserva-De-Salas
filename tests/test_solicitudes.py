@@ -522,3 +522,52 @@ def test_sin_sala_por_llegar_tarde_lo_explica(servidor):
     ticket(url, f, 6, reloj=tarde).ejecutar()
     assert not f.issues[6].abierto and "sin-sala" in f.issues[6].etiquetas
     assert "después de la apertura" in f.comentarios[6][0]
+
+
+# ───────────────────────── resultado de la corrida de un ticket (v4.3) ─────────────────────────
+
+@pytest.fixture
+def salida(tmp_path, monkeypatch):
+    f = tmp_path / "salida.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(f))
+    def leer():
+        datos = dict(l.split("=", 1) for l in f.read_text(encoding="utf-8").splitlines() if "=" in l)
+        return datos.get("resultado")
+    return leer
+
+
+def test_resultado_ticket_reservada(servidor, salida):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(1, solicitud(salas=("6",)), etiquetas={"aprobada"})
+    ticket(url, f, 1).ejecutar()
+    assert salida() == "reservada"
+
+
+def test_resultado_ticket_descartada_e_inactivo(servidor, salida):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(2, solicitud(salas=("8",)), etiquetas={"aprobada"})     # solo la F de 12:15
+    ticket(url, f, 2).ejecutar()
+    assert salida() == "descartada"
+    ticket(url, f, 99).ejecutar()                                     # eliminado
+    assert salida() == "inactivo"
+
+
+def test_resultado_ticket_pendiente_de_noche(servidor, salida):
+    est, url = servidor("normal")
+    est.reservar("Otra Persona", "6", "12:15-14:15")
+    f = FuenteFalsa()
+    f.agregar(3, solicitud(salas=("6",)), etiquetas={"aprobada"})
+    noche = lambda: datetime(2026, 10, 22, 22, 54, tzinfo=rb.BO_TZ)
+    ticket(url, f, 3, reloj=noche).ejecutar()
+    assert salida() == "pendiente" and f.issues[3].abierto
+
+
+def test_resultado_ticket_sin_sala(servidor, salida):
+    est, url = servidor("normal")
+    est.hoy = date(2026, 10, 22)
+    f = FuenteFalsa()
+    f.agregar(4, solicitud(salas=("6",), fecha=date(2026, 10, 22)), etiquetas={"aprobada"}, fecha=date(2026, 10, 22))
+    ticket(url, f, 4, reloj=lambda: datetime(2026, 10, 22, 15, 0, tzinfo=rb.BO_TZ)).ejecutar()
+    assert salida() == "no-se-libero"

@@ -4,7 +4,7 @@
 | :-- | :-- |
 | Proyecto | Reserva automática de salas de estudio, UPB sede Santa Cruz |
 | Responsable | Hugo Rafael Zúñiga Daza |
-| Versión | 3.2 |
+| Versión | 3.3 |
 | Fecha | 07/11/2026 |
 | Estado | En pruebas: verificado contra entornos simulados; falta la verificación en el sistema real (ver §8) |
 | Panel | `https://hugozuniga770.github.io/Reserva-De-Salas/` |
@@ -15,7 +15,7 @@
 
 - **Tu reserva diaria.** Cada tarde arranca solo y espera la apertura del día siguiente (20:00 hora Bolivia). Reserva tu sala de estudio preferida (F → D → B → C) en tu horario y **solo la da por hecha cuando la ve en el calendario del servidor**.
 - **Solicitudes de compañeros.** Piden sala desde una página pública, eligiendo días en un calendario, **hasta las 18:30 del día anterior** (después se intenta sin garantía). La Sala F de 12:15 a 14:15 no está disponible para solicitudes. Sus datos viajan cifrados, cada solicitud se atiende en **su propia corrida aislada** y los datos se borran después de usarse.
-- **Control desde el celular.** Un panel con el estilo de UPBnet permite correr, probar, detener, configurar, aprobar solicitudes y ver el estado.
+- **Control desde el celular.** Un panel con el estilo de UPBnet permite correr, probar, detener, configurar, aprobar solicitudes y ver el estado. Cada corrida dice cómo terminó: «Reservada ✅», «No se liberó», «En progreso: vigilando», etc.
 
 ## 2. Arquitectura en una mirada
 
@@ -37,7 +37,7 @@ Detalle, diagramas y decisiones: [03 · Arquitectura](documentacion/03-arquitect
 | `LICENSE` | Todos los derechos reservados |
 | `.github/workflows/reservar.yml` | Horarios, carriles de concurrencia y permisos |
 | `.github/workflows/tests.yml` | pytest + prueba del panel en Chromium |
-| `tests/` | 74 casos de pytest y la prueba de punta a punta del panel |
+| `tests/` | 87 casos de pytest y la prueba de punta a punta del panel |
 | `documentacion/` | Documentación del proyecto (01 a 09) |
 | `formulario.md` | Diccionario del formulario de la UPB (campos, IDs de salas y horarios) |
 | `Pagina UPB/` | HTML real guardado, usado por las pruebas |
@@ -56,9 +56,9 @@ Manual completo: [06 · Manual de usuario](documentacion/06-manual-de-usuario.md
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest -q                         # 74 casos
+python -m pytest -q                         # 87 casos
 pip install playwright && python -m playwright install chromium
-python tests/panel_e2e.py capturas          # panel en Chromium: 9 verificaciones
+python tests/panel_e2e.py capturas          # panel en Chromium: 10 verificaciones
 ```
 
 Matriz requisito ↔ prueba: [07 · Pruebas y trazabilidad](documentacion/07-pruebas-y-trazabilidad.md).

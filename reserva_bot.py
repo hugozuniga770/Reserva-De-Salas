@@ -75,6 +75,29 @@ BO_TZ = timezone(timedelta(hours=-4), "BOT")  # Bolivia: UTC-4 todo el año, sin
 EXIT_OK, EXIT_CONFIG, EXIT_RECHAZOS, EXIT_SITIO, EXIT_TARDE, EXIT_COPIA = 0, 1, 2, 3, 4, 5
 # Este servicio solo funciona en su repositorio original (ver LICENSE).
 REPO_AUTORIZADO = "hugozuniga770/Reserva-De-Salas"
+
+# Resultado de cada corrida: se escribe en $GITHUB_OUTPUT, el workflow lo muestra como un paso
+# «Resultado: <código>» y el panel lo traduce. Mantener sincronizado con reservar.yml y docs/index.html.
+RESULTADOS = {
+    "reservada": "Reservada y verificada en el calendario",
+    "ya-la-tenia": "Ya tenía la reserva: no hizo nada",
+    "no-se-libero": "No se liberó ninguna sala",
+    "pendiente": "Solicitud sin sala por ahora: queda abierta y se relanza",
+    "nada": "Nada que hacer (horario pasado o apertura fuera de esta corrida)",
+    "prueba": "Prueba sin reservar",
+    "descartada": "Solicitud descartada (datos inválidos o sala no disponible)",
+    "inactivo": "Solicitud ya no activa (eliminada, cerrada o rechazada)",
+    "tarde": "Arrancó tarde, después de la apertura, sin sala",
+    "error": "Error: revisar el registro (configuración, rechazo de la UPB, sitio caído o copia)",
+}
+
+
+def escribir_resultado(codigo: str) -> None:
+    """Deja el código para el workflow (paso «Resultado: …») y para el panel."""
+    ruta = os.getenv("GITHUB_OUTPUT")
+    if ruta and codigo in RESULTADOS:
+        with open(ruta, "a", encoding="utf-8") as f:
+            f.write(f"resultado={codigo}\n")
 MARCADOR_TICKET = "<!-- reserva-upb:v1 -->"
 # Corridas de tickets: más suaves que la tuya, para no multiplicar la carga y que tú llegues primero.
 RITMO_TICKET = {"intervalo": 4.0, "intervalo_medio": 2.0, "intervalo_rafaga": 1.0}
@@ -333,6 +356,7 @@ class Bot:
         self.fuente = fuente          # solicitudes.GitHubIssues (o un falso en las pruebas)
         self.clave = clave            # llave privada para descifrar solicitudes
         self.personas: list[Persona] = []
+        self.resultado: str | None = None   # lo fijan los caminos que no pasan por un código obvio
         self.sala_duenio = cfg.salas[0] if cfg.salas else ""   # tu sala favorita
         self.hora_cambio_dia: datetime | None = None
         self.invalidas: set[int] = set()
@@ -478,8 +502,10 @@ class Bot:
         with open(ruta, "a", encoding="utf-8") as f:
             f.write(f"## {titulo}\n\n" + "\n".join(f"- {l}" for l in self.resumen) + "\n")
 
-    def terminar(self, codigo: int, titulo: str, anotacion: str = "notice") -> int:
-        log(titulo)
+    def terminar(self, codigo: int, titulo: str, anotacion: str = "notice", resultado: str | None = None) -> int:
+        resultado = resultado or self.resultado or ("nada" if codigo == EXIT_OK else "error")
+        escribir_resultado(resultado)
+        log(f"{titulo}  [resultado: {resultado}]")
         print(f"::{anotacion}::{titulo}", flush=True)
         self.escribir_resumen(titulo)
         return codigo
@@ -544,6 +570,7 @@ class Bot:
 
     def descartar_ticket(self, numero: int, motivo: str) -> None:
         log(f"Ticket #{numero} descartado: {motivo}")
+        self.resultado = "descartada"
         if self.fuente and not self.cfg.dry_run:
             self.fuente.comentar(numero, f"❌ Solicitud descartada: {motivo}.")
             self.fuente.etiquetar(numero, ["invalida"])
@@ -559,9 +586,11 @@ class Bot:
             iss = self.fuente.obtener(n)
         except Exception as e:
             log(f"No pude leer el ticket #{n} ({e.__class__.__name__}).")
+            self.resultado = "error"
             return None
         if iss is None or not iss.abierto or "rechazada" in iss.etiquetas or MARCADOR_TICKET not in iss.cuerpo:
             log(f"Ticket #{n}: ya no está activo (eliminado, cerrado o rechazado). Termino sin hacer nada.")
+            self.resultado = "inactivo"
             return None
         try:
             datos = validar(descifrar(iss.cuerpo, self.clave), p.salas, p.horarios)
@@ -666,6 +695,19 @@ class Bot:
                 return "fuera", q
         return "vigila", q
 
+    def resultado_de_personas(self) -> str:
+        """Resultado de una corrida de ticket según cómo quedó su persona."""
+        if self.resultado:
+            return self.resultado
+        per = self.personas[0] if self.personas else None
+        if per is None:
+            return "nada"
+        if per.reservada_aqui:
+            return "reservada"
+        if per.hecha_en is not None:
+            return "ya-la-tenia"
+        return "no-se-libero" if per.cerrada else "pendiente"
+
     # -- bucle principal --
     def ejecutar(self) -> int:
         cfg = self.cfg
@@ -761,9 +803,9 @@ class Bot:
                 print(f"::warning::{msg}", flush=True)
                 self.notificar(msg)
                 if time.monotonic() >= fin:  # ya pasó también la hora de fin
-                    return self.terminar(EXIT_TARDE, msg, "error")
+                    return self.terminar(EXIT_TARDE, msg, "error", resultado="tarde")
             if ev and time.monotonic() >= fin:
-                return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)")
+                return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)", resultado="ya-la-tenia")
 
             # Latido: confirma al celular que el bot está vivo antes de la apertura.
             if not latido_hecho and not ev and self.en_banda_apertura(ahora) and not cfg.dry_run:
@@ -781,12 +823,12 @@ class Bot:
                     return self.terminar(EXIT_RECHAZOS, "El servidor rechazó la reserva varias veces "
                                          "con el mismo mensaje. Revísalo a mano.", "error")
             if "dry" in estados:
-                return self.terminar(EXIT_OK, "Dry-run terminado: el bot habría reservado.")
+                return self.terminar(EXIT_OK, "Dry-run terminado: el bot habría reservado.", resultado="prueba")
             if "vigila" in estados and (consultas == 1 or consultas % 50 == 0):
                 log(f"Horarios ocupados en las salas objetivo. Vigilando… (consulta {consultas})")
             if not self.personas or all(x.cerrada for x in self.personas):
                 return self.terminar(EXIT_OK, f"Ticket #{self.ticket} terminado." if self.ticket
-                                     else "Nada más que hacer.")
+                                     else "Nada más que hacer.", resultado=self.resultado_de_personas())
             if duenio.hecha_en is None and estados and estados[0] == "espera" and consultas == 1 \
                     and self.horario_ya_paso(p.hoy, ahora, duenio.horario):
                 log(f"El horario {cfg.horario} de hoy ya pasó; espero la apertura del día siguiente.")
@@ -798,8 +840,10 @@ class Bot:
                 if not self.en_banda_apertura(ahora) and time.monotonic() + hasta_banda > fin:
                     if duenio.hecha_en == p.hoy:
                         return self.terminar(EXIT_OK, "Reserva confirmada ✅" if duenio.reservada_aqui
-                                             else "Ya tenías la reserva ✅ (no hice nada)")
-                    return self.terminar(EXIT_OK, "Horario de hoy ya pasó y la próxima apertura cae fuera de esta ejecución.")
+                                             else "Ya tenías la reserva ✅ (no hice nada)",
+                                             resultado="reservada" if duenio.reservada_aqui else "ya-la-tenia")
+                    return self.terminar(EXIT_OK, "Horario de hoy ya pasó y la próxima apertura cae fuera de esta ejecución.",
+                                         resultado="prueba" if cfg.dry_run else "nada")
                 if self.en_nucleo_apertura(ahora):
                     espera = cfg.intervalo_rafaga
                 elif self.en_banda_apertura(ahora):
@@ -835,15 +879,17 @@ class Bot:
                     self.cerrar_solicitud(per, "sin-sala", texto)
         if self.ticket:
             return self.terminar(EXIT_OK, f"Ticket #{self.ticket}: " + (
-                "reserva confirmada ✅" if duenio.reservada_aqui else "terminado sin sala."))
+                "reserva confirmada ✅" if duenio.reservada_aqui else "terminado sin sala."),
+                resultado=self.resultado_de_personas())
         if duenio.reservada_aqui:
-            return self.terminar(EXIT_OK, "Reserva confirmada ✅")
+            return self.terminar(EXIT_OK, "Reserva confirmada ✅", resultado="reservada")
         if duenio.hecha_en is not None and duenio.hecha_en == ultimo_hoy:
-            return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)")
+            return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)", resultado="ya-la-tenia")
         self.resumen.append(f"{ultimo_hoy}: {cfg.horario} no se liberó durante esta ejecución")
         if latido_hecho or aviso_tarde_hecho:
             self.notificar(f"❌ Terminé sin conseguir sala para {ultimo_hoy} {cfg.horario}. Revisa a mano.")
-        return self.terminar(EXIT_OK, "Tiempo agotado: no se liberó la sala (no se reservó nada).", "warning")
+        return self.terminar(EXIT_OK, "Tiempo agotado: no se liberó la sala (no se reservó nada).", "warning",
+                             resultado="prueba" if cfg.dry_run else "no-se-libero")
 
 
 def fuente_desde_entorno():  # noqa: C901
@@ -871,20 +917,24 @@ def main() -> int:
     if not repositorio_autorizado(os.getenv("GITHUB_REPOSITORY")):
         print(f"::error::Copia no autorizada: este servicio solo funciona en {REPO_AUTORIZADO}. "
               "Ver LICENSE (todos los derechos reservados).", flush=True)
+        escribir_resultado("error")
         return EXIT_COPIA
     try:
         cfg = Config.desde_entorno()
     except ValueError as e:
         print(f"::error::{e}", flush=True)
+        escribir_resultado("error")
         return EXIT_CONFIG
     fuente, clave = fuente_desde_entorno()
     ticket = os.getenv("UPB_TICKET", "").strip()
     if ticket:
         if not ticket.isdigit():
             print("::error::UPB_TICKET debe ser un número de ticket", flush=True)
+            escribir_resultado("error")
             return EXIT_CONFIG
         if not (fuente and clave):
             print("::error::Corrida de ticket sin UPB_CLAVE_PRIVADA: no puedo leer la solicitud.", flush=True)
+            escribir_resultado("error")
             return EXIT_CONFIG
         for k, v in RITMO_TICKET.items():  # constantes de código, no configurables
             setattr(cfg, k, v)

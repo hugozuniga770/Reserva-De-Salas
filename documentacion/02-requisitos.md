@@ -75,6 +75,9 @@ Como responsable, quiero correr, probar, pausar y configurar el bot desde el tel
 
 - CA-04.1: «Correr bot ahora» lanza una corrida. Fuera de la noche vigila 60 minutos.
 - CA-04.2: Los cambios de Ajustes se guardan como Variables y los usa la siguiente corrida.
+- CA-04.3: Cada corrida informa su resultado: reservada, ya la tenías, no se liberó, en progreso, prueba, error, etc. El panel lo muestra en cada corrida y destaca cómo terminó tu última corrida.
+- CA-04.4: Bot, workflow y panel usan la misma lista de resultados; una prueba falla si se desincronizan.
+- CA-04.5: Las corridas fantasma de «push» (creadas por GitHub cuando el workflow era inválido) no se muestran.
 
 **HU-05 — Pedir sala sin exponer mis datos** (RF-10, RF-12, RF-13, RNF-02)
 Como estudiante, quiero pedir sala para uno o varios días y seguir su estado, sin que nadie más pueda ver mi código.

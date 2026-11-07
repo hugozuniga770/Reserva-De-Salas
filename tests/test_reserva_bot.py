@@ -516,3 +516,83 @@ def test_workflow_con_candado_al_repositorio_original():
 def test_hay_licencia_con_todos_los_derechos_reservados():
     lic = (RAIZ / "LICENSE").read_text(encoding="utf-8")
     assert "Todos los derechos reservados" in lic and "Hugo Rafael Zúñiga Daza" in lic
+
+
+# ───────────────────────── resultado de cada corrida (v4.3) ─────────────────────────
+
+@pytest.fixture
+def salida(tmp_path, monkeypatch):
+    """Simula $GITHUB_OUTPUT de Actions y devuelve una función que lee el resultado escrito."""
+    f = tmp_path / "salida.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(f))
+    def leer():
+        datos = dict(l.split("=", 1) for l in f.read_text(encoding="utf-8").splitlines() if "=" in l)
+        return datos.get("resultado")
+    return leer
+
+
+def test_resultado_reservada(servidor, salida):
+    est, url = servidor("normal")
+    rb.Bot(config(url)).ejecutar()
+    assert salida() == "reservada"
+
+
+def test_resultado_ya_la_tenia(servidor, salida):
+    est, url = servidor("normal")
+    est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")
+    rb.Bot(config(url, max_segundos=30)).ejecutar()
+    assert salida() == "ya-la-tenia"
+
+
+def test_resultado_no_se_libero(servidor, salida):
+    est, url = servidor("normal")
+    est.reservar("Otra Persona", "8", "12:15-14:15")
+    rb.Bot(config(url, max_segundos=0.3)).ejecutar()
+    assert salida() == "no-se-libero"
+
+
+def test_resultado_prueba(servidor, salida):
+    est, url = servidor("normal")
+    rb.Bot(config(url, dry_run=True)).ejecutar()
+    assert salida() == "prueba"
+
+
+def test_resultado_horario_pasado(servidor, salida):
+    est, url = servidor("normal")
+    tarde = lambda: datetime(2026, 10, 23, 15, 0, tzinfo=rb.BO_TZ)
+    rb.Bot(config(url, reloj=tarde, max_segundos=30)).ejecutar()
+    assert salida() == "nada"
+
+
+def test_resultado_arranco_tarde(servidor, salida):
+    est, url = servidor("normal")
+    est.reservar("Otra Persona", "8", "12:15-14:15")
+    tarde = lambda: datetime(2026, 11, 4, 22, 37, tzinfo=rb.BO_TZ)
+    rb.Bot(config(url, reloj=tarde, salas=["8"])).ejecutar()
+    assert salida() == "tarde"
+
+
+def test_resultado_error_por_rechazos_y_sitio_caido(servidor, salida):
+    est, url = servidor("rechaza")
+    rb.Bot(config(url, max_rechazos=2)).ejecutar()
+    assert salida() == "error"
+    est2, url2 = servidor("caido")
+    rb.Bot(config(url2, max_segundos=0.3)).ejecutar()
+    assert salida() == "error"
+
+
+def test_resultado_copia_no_autorizada(monkeypatch, salida):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "otra-persona/Reserva-De-Salas")
+    assert rb.main() == rb.EXIT_COPIA
+    assert salida() == "error"
+
+
+def test_workflow_muestra_cada_resultado():
+    """Cada código del bot tiene su paso «Resultado: …» en el workflow y su texto en el panel."""
+    yml = (RAIZ / ".github" / "workflows" / "reservar.yml").read_text(encoding="utf-8")
+    panel = (RAIZ / "docs" / "index.html").read_text(encoding="utf-8")
+    assert "id: bot" in yml
+    for codigo in rb.RESULTADOS:
+        assert f'name: "Resultado: {codigo}"' in yml, codigo
+        assert f"if: always() && steps.bot.outputs.resultado == '{codigo}'" in yml, codigo
+        assert f'"{codigo}": [' in panel, f"el panel no sabe mostrar «{codigo}»"

@@ -53,7 +53,11 @@ class GitHubFalso:
              "run_started_at": "2026-11-05T22:40:00Z", "created_at": "2026-11-05T22:40:00Z", "html_url": "https://github.com/x/runs/501"},
             {"id": 500, "display_title": "Tu reserva", "status": "completed", "conclusion": "success", "event": "schedule",
              "run_started_at": "2026-11-04T22:41:00Z", "created_at": "2026-11-04T22:41:00Z", "html_url": "https://github.com/x/runs/500"},
+            # corrida fantasma: GitHub la crea fallida en cada push mientras el workflow es inválido
+            {"id": 400, "display_title": "Update reservar.yml", "status": "completed", "conclusion": "failure", "event": "push",
+             "run_started_at": "2026-11-05T01:56:00Z", "created_at": "2026-11-05T01:56:00Z", "html_url": "https://github.com/x/runs/400"},
         ]
+        self.resultado_runs = {500: "reservada", 501: None}
         self.variables = {"UPB_SALAS": "8,6,15,3", "UPB_HORARIO": "12:15-14:15"}
         self.contenido = {}
         self.despachos, self.llamadas = [], []
@@ -79,6 +83,13 @@ class GitHubFalso:
                 return 422, {"message": f"Entradas no válidas: {entradas}"}
             self.despachos.append(entradas)
             return 204, None
+        m = re.fullmatch(r"/actions/runs/(\d+)/jobs", r)
+        if m:
+            codigo = self.resultado_runs.get(int(m.group(1)))
+            pasos = [{"name": "Reservar (con verificación)", "conclusion": "success"}] + [
+                {"name": f"Resultado: {c}", "conclusion": "success" if c == codigo else "skipped"}
+                for c in ("reservada", "ya-la-tenia", "no-se-libero", "nada", "prueba", "error")]
+            return 200, {"jobs": [{"steps": pasos}]}
         m = re.fullmatch(r"/actions/runs/(\d+)/cancel", r)
         if m:
             return 202, {}
@@ -249,6 +260,12 @@ def main():
                          localStorage.setItem('upb_nombre_mostrar','Hugo Zúñiga')""")
         pag.goto(base + "#inicio")
         pag.wait_for_selector("text=El bot no está corriendo")  # 19:20 sin corrida tuya → alerta roja
+        pag.wait_for_selector("text=Tu última corrida:")
+        assert pag.locator(".alerta-ok", has_text="Reservada ✅").count() == 1, "debe decir cómo terminó tu última corrida"
+        assert pag.locator(".items li", has_text="Tu reserva").locator("text=Reservada ✅").count() == 1
+        assert pag.locator(".items li", has_text="Solicitud #12").locator("text=En progreso: vigilando").count() == 1
+        assert pag.locator("text=Update reservar.yml").count() == 0, "las corridas fantasma de push no se muestran"
+        resultados["resultado_de_cada_corrida"] = "OK"
         pag.screenshot(path=CAPTURAS / "05-inicio-alerta.png", full_page=True)
         pag.click("text=Arrancarlo ahora")
         pag.wait_for_selector("text=Bot lanzado")

@@ -73,6 +73,7 @@ jobs:
       - run: pip install -r requirements.txt
 
       - name: Reservar (con verificación)
+        id: bot
         env:
           # Lo que cambias desde el panel (Variables) manda sobre los Secrets.
           UPB_NOMBRE:    ${{ vars.UPB_NOMBRE    || secrets.UPB_NOMBRE }}
@@ -95,6 +96,39 @@ jobs:
           UPB_AUTO_APROBAR_BO: ${{ vars.UPB_AUTO_APROBAR_BO || '18:30' }}
           UPB_MAX_PERSONAS:    ${{ vars.UPB_MAX_PERSONAS    || '4' }}
         run: python reserva_bot.py
+
+      # Resultado legible: solo se ejecuta el paso que corresponde (los demás quedan «skipped»).
+      # El panel lee cuál corrió para decir «Reservada», «No se liberó», etc. Ver RESULTADOS en reserva_bot.py.
+      - name: "Resultado: reservada"
+        if: always() && steps.bot.outputs.resultado == 'reservada'
+        run: 'echo "Reservada y verificada en el calendario"'
+      - name: "Resultado: ya-la-tenia"
+        if: always() && steps.bot.outputs.resultado == 'ya-la-tenia'
+        run: 'echo "Ya tenía la reserva: no hizo nada"'
+      - name: "Resultado: no-se-libero"
+        if: always() && steps.bot.outputs.resultado == 'no-se-libero'
+        run: 'echo "No se liberó ninguna sala"'
+      - name: "Resultado: pendiente"
+        if: always() && steps.bot.outputs.resultado == 'pendiente'
+        run: 'echo "Solicitud sin sala por ahora: queda abierta y se relanza"'
+      - name: "Resultado: nada"
+        if: always() && steps.bot.outputs.resultado == 'nada'
+        run: 'echo "Nada que hacer (horario pasado o apertura fuera de esta corrida)"'
+      - name: "Resultado: prueba"
+        if: always() && steps.bot.outputs.resultado == 'prueba'
+        run: 'echo "Prueba sin reservar"'
+      - name: "Resultado: descartada"
+        if: always() && steps.bot.outputs.resultado == 'descartada'
+        run: 'echo "Solicitud descartada (datos inválidos o sala no disponible)"'
+      - name: "Resultado: inactivo"
+        if: always() && steps.bot.outputs.resultado == 'inactivo'
+        run: 'echo "Solicitud ya no activa (eliminada, cerrada o rechazada)"'
+      - name: "Resultado: tarde"
+        if: always() && steps.bot.outputs.resultado == 'tarde'
+        run: 'echo "Arrancó tarde, después de la apertura, sin sala"'
+      - name: "Resultado: error"
+        if: always() && steps.bot.outputs.resultado == 'error'
+        run: 'echo "Error: revisar el registro (configuración, rechazo de la UPB, sitio caído o copia)"'
 
       # Si la corrida de un ticket se corta (cancelada, error, tiempo), el ticket se
       # libera para que tu corrida lo vuelva a lanzar. Nunca queda trabado.

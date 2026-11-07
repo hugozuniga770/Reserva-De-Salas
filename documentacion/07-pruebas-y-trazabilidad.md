@@ -16,17 +16,17 @@
 
 | Nivel | Qué cubre | Archivo | Cantidad |
 | :-- | :-- | :-- | :--: |
-| Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo, y validación de los workflows (YAML como GitHub + actionlint) | `tests/test_reserva_bot.py` | 41 casos |
-| Tickets y cifrado | Corridas aisladas, despacho, privacidad, compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) y bot completo por HTTP con las variables de Actions | `tests/test_solicitudes.py` | 33 casos |
-| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 9 verificaciones |
+| Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo, y validación de los workflows (YAML como GitHub + actionlint) | `tests/test_reserva_bot.py` | 50 casos |
+| Tickets y cifrado | Corridas aisladas, despacho, privacidad, compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) y bot completo por HTTP con las variables de Actions | `tests/test_solicitudes.py` | 37 casos |
+| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 10 verificaciones |
 
 Todas corren en GitHub Actions en cada push (`tests.yml`). El trabajo del panel sube las capturas como artefacto.
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest -q                       # 74 casos
+python -m pytest -q                       # 87 casos
 pip install playwright && python -m playwright install chromium
-python tests/panel_e2e.py capturas        # 9 verificaciones + capturas
+python tests/panel_e2e.py capturas        # 10 verificaciones + capturas
 ```
 
 Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y ritmos de milisegundos, así que corren en segundos.
@@ -73,6 +73,10 @@ Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y r
 | CA-08.1 Candado de repositorio | RF-17 | `test_el_bot_no_corre_en_copias_del_repositorio`, `test_el_bot_si_corre_en_el_repositorio_original`, `test_workflow_con_candado_al_repositorio_original` | ✅ |
 | CA-08.2 Candado de dominio | RF-17 | `panel_e2e: copia_no_autorizada` | ✅ |
 | CA-08.3 Licencia | RF-17 | `test_hay_licencia_con_todos_los_derechos_reservados` | ✅ |
+| CA-04.3 Resultado de tu corrida | RF-07 | `test_resultado_reservada`, `test_resultado_ya_la_tenia`, `test_resultado_no_se_libero`, `test_resultado_prueba`, `test_resultado_horario_pasado`, `test_resultado_arranco_tarde`, `test_resultado_error_por_rechazos_y_sitio_caido`, `test_resultado_copia_no_autorizada` | ✅ |
+| CA-04.3 Resultado de la corrida de un ticket | RF-07, RF-12 | `test_resultado_ticket_reservada`, `test_resultado_ticket_descartada_e_inactivo`, `test_resultado_ticket_pendiente_de_noche`, `test_resultado_ticket_sin_sala` | ✅ |
+| CA-04.4 Bot, workflow y panel sincronizados | RF-07 | `test_workflow_muestra_cada_resultado` | ✅ |
+| CA-04.3 y CA-04.5 en el panel | RF-07 | `panel_e2e: resultado_de_cada_corrida` | ✅ |
 
 ## 3. Pendiente de verificación manual
 

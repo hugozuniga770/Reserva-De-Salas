@@ -71,7 +71,7 @@ Abre el panel → **Administrar**, pega tu fine-grained token y sigue la **Guía
 
 ### B.2 Uso diario
 
-- **Inicio**: cuenta regresiva a las 20:00, estado del bot, solicitudes y tu configuración. Botones: **Correr bot ahora**, **Probar sin reservar** y **Detener**. Si a la hora crítica el bot no corre, aparece una alerta roja con **Arrancarlo ahora**.
+- **Inicio**: arriba, **cómo terminó tu última corrida** (por ejemplo «Reservada ✅» o «No se liberó»). Debajo, la cuenta regresiva a las 20:00, el estado del bot, las solicitudes y tu configuración. En «Corridas recientes» cada corrida dice su resultado; la tabla completa está en [05 · Operación](05-operacion.md) §3. Botones: **Correr bot ahora**, **Probar sin reservar** y **Detener**. Si a la hora crítica el bot no corre, aparece una alerta roja con **Arrancarlo ahora**.
 - **Solicitudes**: ves nombre, fecha, salas y estado de cada solicitud.
   - **Aprobar**: si es su tarde, la lanza en su propia corrida. Si no, se lanzará sola el día anterior desde las 15:30.
   - **Lanzar ahora**: solo si ya es su tarde. Si la lanzas fuera de 15:00–21:15, vigila 60 minutos buscando cancelaciones; si no consigue, la solicitud queda abierta y se relanza sola la tarde siguiente.

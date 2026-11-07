@@ -37,7 +37,28 @@
 | Corrida en rojo con código 4 | Arrancó después de las 21:15 sin sala | GitHub muy atrasado. Configura cron-job.org |
 | Ticket descartado | Datos ilegibles o inválidos (motivo en el comentario) | Pide al estudiante que envíe de nuevo |
 
-## 3. Códigos de salida del bot
+## 3. Qué significa cada resultado
+
+El panel (Inicio → «Tu última corrida» y «Corridas recientes») muestra cómo terminó cada corrida. En GitHub → Actions se ve el mismo dato como el paso «Resultado: …» de cada corrida.
+
+| En el panel | Código | Significado | Qué hacer |
+| :-- | :-- | :-- | :-- |
+| En progreso: vigilando | — | La corrida está activa ahora | Nada |
+| En cola | — | GitHub está por arrancarla (o espera a que termine otra tuya) | Nada |
+| Reservada ✅ | `reservada` | Reservada **y verificada** en el calendario de la UPB | Nada |
+| Ya la tenías | `ya-la-tenia` | La reserva ya existía; no hizo nada | Nada |
+| No se liberó | `no-se-libero` | Vigiló hasta el final y ninguna sala se liberó | Reservar a mano si hace falta |
+| Sin sala aún: se relanza | `pendiente` | Solicitud lanzada tarde que no consiguió todavía; queda abierta | Nada: se relanza la tarde siguiente |
+| Nada que hacer | `nada` | Tu horario ya pasó y la próxima apertura cae fuera de esta corrida | Nada |
+| Prueba OK | `prueba` | Prueba sin reservar | Nada |
+| Solicitud descartada | `descartada` | Datos inválidos o sala no disponible (motivo en el comentario del issue) | Pedir que la envíen de nuevo |
+| Solicitud ya no activa | `inactivo` | El ticket se eliminó, cerró o rechazó antes de su corrida | Nada |
+| Arrancó tarde | `tarde` | GitHub la arrancó después de las 20:00 y no había sala | Configurar cron-job.org |
+| Con error | `error` | Configuración, rechazo repetido de la UPB, sitio caído o copia no autorizada | Abrir «Ver» y leer el registro |
+
+Las corridas del **05/11 marcadas con «push»** no son corridas reales. GitHub las crea, fallidas, en cada commit mientras el archivo del workflow es inválido; pasó antes de la corrección de la v4.1. El panel las oculta. Si quieres, puedes borrarlas en GitHub → Actions → cada corrida → «Delete workflow run».
+
+## 4. Códigos de salida del bot
 
 | Código | Significado |
 | :--: | :-- |
@@ -48,7 +69,7 @@
 | 4 | Arranque tardío sin sala |
 | 5 | Copia no autorizada: corrió en un repositorio que no es el original |
 
-## 4. Tareas periódicas
+## 5. Tareas periódicas
 
 | Frecuencia | Tarea |
 | :-- | :-- |
@@ -57,10 +78,10 @@
 | Antes de que venza | Renovar los tokens del panel y de cron-job.org |
 | Feriados y vacaciones | Ajustes → «Pausar los arranques automáticos» |
 
-## 5. Cambios que hace el panel en el repositorio
+## 6. Cambios que hace el panel en el repositorio
 
 Dos acciones del panel crean un commit en tu repositorio: crear la llave (`docs/clave_publica.txt`) y guardar Ajustes cuando cambian tu sala, horario o plazo (`docs/servicio.json`). **Antes de subir algo desde tu PC, corre `git pull`.**
 
-## 6. Ajuste fino con datos reales
+## 7. Ajuste fino con datos reales
 
 Durante la primera semana, anota en cada resumen la línea «📅 El servidor cambió a … a las HH:MM:SS». Si la apertura real no es a las 20:00, cambia `UPB_APERTURA_BO` en `reservar.yml`. La banda y el núcleo se mueven con ella.

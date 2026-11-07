@@ -323,3 +323,161 @@ def test_sin_llave_el_bot_sigue_solo_contigo(monkeypatch):
     for v in ("UPB_GH_TOKEN", "UPB_REPO", "UPB_CLAVE_PRIVADA"):
         monkeypatch.delenv(v, raising=False)
     assert rb.fuente_desde_entorno() == (None, None)
+
+
+def test_ticket_aprobado_de_noche_no_se_cierra_sin_vigilar(servidor):
+    """Caso real (05/11 22:54): se aprueba un ticket para el día siguiente después de las 21:15.
+    Su corrida no debe cerrarlo como 'sin sala' tras una sola consulta: lo deja abierto para que
+    vuelva a lanzarse, con sus datos intactos."""
+    est, url = servidor("normal")
+    est.reservar("Otra Persona", "8", "12:15-14:15")
+    f = FuenteFalsa()
+    f.agregar(1, solicitud(salas=("8",)), etiquetas={"aprobada", "en-curso"})
+    noche = lambda: datetime(2026, 10, 22, 22, 54, tzinfo=rb.BO_TZ)  # servidor ya en el 23
+    assert ticket(url, f, 1, reloj=noche).ejecutar() == 0
+    assert f.issues[1].abierto and "sin-sala" not in f.issues[1].etiquetas
+    assert "upbv1" in f.issues[1].cuerpo and est.posts == []
+
+
+def test_ticket_lanzado_de_noche_con_minutos_vigila_cancelaciones(servidor):
+    """Desde el panel, fuera de 15:00–21:15, el ticket se lanza con 'minutos': vigila y toma
+    la sala si alguien la libera."""
+    est, url = servidor("normal")
+    est.reservar("Otra Persona", "8", "12:15-14:15")
+    est.liberar_tras_gets = ("8", "12:15-14:15", 4)
+    f = FuenteFalsa()
+    f.agregar(1, solicitud(salas=("8",)), etiquetas={"aprobada", "en-curso"})
+    noche = lambda: datetime(2026, 10, 22, 22, 54, tzinfo=rb.BO_TZ)
+    assert ticket(url, f, 1, reloj=noche, hasta_bo="", max_segundos=3).ejecutar() == 0
+    assert [x["first_name"] for x in est.posts] == ["Ana María"]
+    assert not f.issues[1].abierto and "reservada" in f.issues[1].etiquetas
+
+
+# ───────────────────────── de punta a punta por HTTP, como en GitHub Actions ─────────────────────────
+
+class _GitHubHTTP:
+    """API de GitHub mínima por HTTP: verifica las rutas REALES que usa solicitudes.GitHubIssues."""
+
+    def __init__(self):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.issues, self.llamadas, self.despachos = {}, [], []
+        gh = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _resp(self, cod, datos=None):
+                cuerpo = b"" if datos is None else json.dumps(datos).encode()
+                self.send_response(cod)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(cuerpo)))
+                self.end_headers()
+                self.wfile.write(cuerpo)
+
+            def _manejar(self, metodo):
+                from urllib.parse import unquote, urlparse
+                largo = int(self.headers.get("Content-Length") or 0)
+                cuerpo = json.loads(self.rfile.read(largo)) if largo else None
+                ruta = urlparse(self.path).path
+                gh.llamadas.append((metodo, ruta))
+                assert self.headers.get("Authorization") == "Bearer tok-prueba"
+                base = "/repos/hugo/Reserva-De-Salas"
+                if not ruta.startswith(base):
+                    return self._resp(404, {"message": "Not Found"})
+                r = ruta[len(base):]
+                if r == "/issues" and metodo == "GET":
+                    return self._resp(200, [i for i in gh.issues.values() if i["state"] == "open"])
+                if r == "/actions/workflows/reservar.yml/dispatches" and metodo == "POST":
+                    gh.despachos.append(cuerpo)
+                    return self._resp(204)
+                partes = r.split("/")  # ['', 'issues', n, ...]
+                if len(partes) >= 3 and partes[1] == "issues":
+                    n = int(partes[2])
+                    i = gh.issues.get(n)
+                    if i is None:
+                        return self._resp(404, {"message": "Not Found"})
+                    resto = "/".join(partes[3:])
+                    if resto == "" and metodo == "GET":
+                        return self._resp(200, i)
+                    if resto == "" and metodo == "PATCH":
+                        i.update({k: v for k, v in cuerpo.items() if k in ("body", "state")})
+                        return self._resp(200, i)
+                    if resto == "comments" and metodo == "POST":
+                        i.setdefault("_comentarios", []).append(cuerpo["body"])
+                        return self._resp(201, {})
+                    if resto == "labels" and metodo == "POST":
+                        for e in cuerpo["labels"]:
+                            if e not in [x["name"] for x in i["labels"]]:
+                                i["labels"].append({"name": e})
+                        return self._resp(200, i["labels"])
+                    if resto.startswith("labels/") and metodo == "DELETE":
+                        e = unquote(resto[len("labels/"):])
+                        i["labels"] = [x for x in i["labels"] if x["name"] != e]
+                        return self._resp(200, i["labels"])
+                return self._resp(404, {"message": f"no simulado {metodo} {r}"})
+
+            def do_GET(self): self._manejar("GET")
+            def do_POST(self): self._manejar("POST")
+            def do_PATCH(self): self._manejar("PATCH")
+            def do_DELETE(self): self._manejar("DELETE")
+
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.url = f"http://127.0.0.1:{self.srv.server_port}"
+
+    def agregar(self, n, datos, etiquetas, fecha):
+        self.issues[n] = {"number": n, "state": "open", "title": sol.titulo_ticket(fecha, "12:15-14:15", "ABC234"),
+                          "body": f"{sol.MARCADOR}\n\n{sol.cifrar(datos, PUB)}\n", "labels": [{"name": e} for e in etiquetas]}
+
+
+def _entorno_actions(monkeypatch, url_upb, gh, **extra):
+    """Las mismas variables que pone reservar.yml en GitHub Actions."""
+    vars_ = {"UPB_NOMBRE": "Hugo Rafael", "UPB_APELLIDO": "Zúñiga Daza", "UPB_CODIGO": "95503",
+             "UPB_SALAS": "8,6,15,3", "UPB_HORARIO": "12:15-14:15", "UPB_DRY_RUN": "0", "UPB_URL": url_upb,
+             "UPB_HASTA_BO": "", "UPB_MAX_MINUTOS": "0.1", "UPB_GH_TOKEN": "tok-prueba",
+             "UPB_REPO": "hugo/Reserva-De-Salas", "UPB_CLAVE_PRIVADA": PRIV, "UPB_GH_API": gh.url,
+             "GITHUB_REF_NAME": "main", "NTFY_TOPIC": ""}
+    vars_.update(extra)
+    for k, v in vars_.items():
+        monkeypatch.setenv(k, v)
+
+
+def _manana_bo():
+    from datetime import timedelta
+    return (datetime.now(rb.BO_TZ) + timedelta(days=1)).date()
+
+
+def test_corrida_de_ticket_completa_por_http(servidor, monkeypatch):
+    """Como en Actions con input ticket=12: lee SOLO el #12 por la API, reserva, comenta,
+    etiqueta, quita en-curso, borra los datos y cierra. Todo por HTTP."""
+    est, url = servidor("normal")
+    est.hoy = _manana_bo()
+    gh = _GitHubHTTP()
+    gh.agregar(12, solicitud(salas=("6",), fecha=est.hoy), {"aprobada", "en-curso"}, est.hoy)
+    _entorno_actions(monkeypatch, url, gh, UPB_TICKET="12")
+    assert rb.main() == 0
+    i = gh.issues[12]
+    assert [x["first_name"] for x in est.posts] == ["Ana María"]
+    assert i["state"] == "closed" and i["body"] == sol.BORRADO
+    assert {x["name"] for x in i["labels"]} == {"aprobada", "reservada"}
+    assert i["_comentarios"][0].startswith("✅ Reservado y verificado: Sala de estudio D")
+    gh.srv.shutdown()
+
+
+def test_tu_corrida_lanza_tickets_por_http(servidor, monkeypatch):
+    """Como en Actions sin ticket: tu corrida lista los tickets por la API y lanza la corrida
+    aislada del aprobado (workflow_dispatch con ticket como texto), sin tocar su contenido."""
+    est, url = servidor("normal")
+    est.hoy = _manana_bo()
+    gh = _GitHubHTTP()
+    gh.agregar(7, solicitud(fecha=est.hoy), {"aprobada"}, est.hoy)
+    gh.agregar(8, solicitud(codigo="22222", fecha=est.hoy), {"rechazada"}, est.hoy)
+    _entorno_actions(monkeypatch, url, gh)
+    monkeypatch.setattr(rb.Bot, "en_nucleo_apertura", lambda self, ahora: False)  # independiente de la hora real
+    assert rb.main() == 0
+    assert gh.despachos == [{"ref": "main", "inputs": {"ticket": "7"}}]
+    assert "en-curso" in {x["name"] for x in gh.issues[7]["labels"]} and "upbv1" in gh.issues[7]["body"]
+    assert [x["first_name"] for x in est.posts] == ["Hugo Rafael"]
+    gh.srv.shutdown()

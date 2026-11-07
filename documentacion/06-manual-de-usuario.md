@@ -62,7 +62,7 @@ Abre el panel → **Administrar**, pega tu fine-grained token y sigue la **Guía
 - **Inicio**: cuenta regresiva a las 20:00, estado del bot, solicitudes y tu configuración. Botones: **Correr bot ahora**, **Probar sin reservar** y **Detener**. Si a la hora crítica el bot no corre, aparece una alerta roja con **Arrancarlo ahora**.
 - **Solicitudes**: ves nombre, fecha, salas y estado de cada solicitud.
   - **Aprobar**: si es su tarde, la lanza en su propia corrida. Si no, se lanzará sola el día anterior desde las 15:30.
-  - **Lanzar ahora**: solo si ya es su tarde.
+  - **Lanzar ahora**: solo si ya es su tarde. Si la lanzas fuera de 15:00–21:15, vigila 60 minutos buscando cancelaciones; si no consigue, la solicitud queda abierta y se relanza sola la tarde siguiente.
   - **Rechazar**: no se atenderá. Si estaba corriendo, se detiene.
   - **Quitar y borrar datos**: la cierra y borra lo cifrado.
   - **Agregar una solicitud** o **Pegar texto de WhatsApp**: para pedidos que te llegan por chat. Se crean ya aprobadas.

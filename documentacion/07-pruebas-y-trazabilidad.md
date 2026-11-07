@@ -16,17 +16,17 @@
 
 | Nivel | Qué cubre | Archivo | Cantidad |
 | :-- | :-- | :-- | :--: |
-| Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo | `tests/test_reserva_bot.py` | 35 casos |
-| Tickets y cifrado | Corridas aisladas, despacho, privacidad y compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) | `tests/test_solicitudes.py` | 25 casos |
-| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada | `tests/panel_e2e.py` | 6 verificaciones |
+| Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo, y validación de los workflows (YAML como GitHub + actionlint) | `tests/test_reserva_bot.py` | 37 casos |
+| Tickets y cifrado | Corridas aisladas, despacho, privacidad, compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) y bot completo por HTTP con las variables de Actions | `tests/test_solicitudes.py` | 29 casos |
+| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 7 verificaciones |
 
 Todas corren en GitHub Actions en cada push (`tests.yml`). El trabajo del panel sube las capturas como artefacto.
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest -q                       # 60 casos
+python -m pytest -q                       # 66 casos
 pip install playwright && python -m playwright install chromium
-python tests/panel_e2e.py capturas        # 6 verificaciones + capturas
+python tests/panel_e2e.py capturas        # 7 verificaciones + capturas
 ```
 
 Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y ritmos de milisegundos, así que corren en segundos.
@@ -63,6 +63,10 @@ Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y r
 | Red inestable | RNF-04 | `test_backoff_mas_corto_dentro_de_la_banda`, `test_sitio_caido`, `test_pagina_rota_nunca_envia` | ✅ |
 | Acciones del administrador | RF-11 | `panel_e2e: acciones_admin` | ✅ |
 | Carriles paralelos de tickets | RF-12 | `test_workflow_tickets_en_carriles_propios` | ✅ |
+| Workflow válido tal como lo lee GitHub (C-10) | RNF-06 | `test_workflows_expresiones_cerradas_tras_leer_el_yaml`, `test_workflows_pasan_actionlint` | ✅ |
+| Ticket aprobado de noche no se cierra sin vigilar (C-11) | RF-12 | `test_ticket_aprobado_de_noche_no_se_cierra_sin_vigilar`, `test_ticket_lanzado_de_noche_con_minutos_vigila_cancelaciones` | ✅ |
+| Corrida activa sobre la de la cola (C-12) | RF-07 | `panel_e2e: corriendo_vs_en_cola` | ✅ |
+| Bot completo por HTTP como en Actions | RF-01, RF-12 | `test_corrida_de_ticket_completa_por_http`, `test_tu_corrida_lanza_tickets_por_http` | ✅ |
 
 ## 3. Pendiente de verificación manual
 
@@ -73,6 +77,7 @@ Estos puntos **no pueden** cubrirse con pruebas automáticas desde fuera de la r
 | VM-01 | Primera reserva real con verificación | Dry-run, luego una noche real; revisar el resumen | Pendiente |
 | VM-02 | Hora real de apertura (SUP-01) | Línea «📅 El servidor cambió…» en el resumen | Pendiente |
 | VM-03 | Mensajes reales de rechazo del sistema | Registro de la corrida | Pendiente |
-| VM-04 | Panel contra la API real de GitHub | Guía → paso 2 «Revisar permisos» y paso 8 | Pendiente |
-| VM-05 | Carga del logo oficial desde GitHub Pages | Abrir el panel en el celular | Pendiente |
+| VM-04 | Panel contra la API real de GitHub | Guía → paso 2 «Revisar permisos» y paso 8 | Parcial: lectura, llave y descifrado verificados el 05/11; lanzar corridas tras C-10 |
+| VM-05 | Carga del logo oficial desde GitHub Pages | Abrir el panel en el celular | ✅ Verificado el 05/11 |
+| VM-07 | Primera solicitud real cifrada en el navegador y leída en el panel | Ticket #1 | ✅ Verificado el 05/11 |
 | VM-06 | Corridas de tickets en paralelo (sin «queued») | Aprobar 2 solicitudes de prueba y mirar Actions | Pendiente |

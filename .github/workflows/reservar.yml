@@ -1,7 +1,8 @@
 name: Reserva Sala UPB
 
 # El nombre de cada corrida (visible para todos en Actions y en el panel) nunca lleva datos personales.
-run-name: ${{ inputs.ticket && format('Solicitud #{0}', inputs.ticket) || (inputs.dry_run && 'Prueba sin reservar' || 'Tu reserva') }}
+# OJO: va entre comillas dobles. Sin comillas, YAML toma « #» como inicio de comentario y corta la línea.
+run-name: "${{ inputs.ticket && format('Solicitud #{0}', inputs.ticket) || ((inputs.dry_run == true || inputs.dry_run == 'true') && 'Prueba sin reservar' || 'Tu reserva') }}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TU CORRIDA (sin "ticket"): arranca con cualquiera de estos 5 horarios (GitHub los
@@ -45,7 +46,7 @@ on:
 # Carriles: TU corrida usa uno solo (nunca dos tuyas a la vez, y nunca se mata una
 # que está enviando). Cada TICKET tiene su propio carril → corren en paralelo.
 concurrency:
-  group: ${{ inputs.ticket && format('upb-ticket-{0}', inputs.ticket) || 'reserva-sala-upb' }}
+  group: "${{ inputs.ticket && format('upb-ticket-{0}', inputs.ticket) || 'reserva-sala-upb' }}"
   cancel-in-progress: false
 
 # Permisos mínimos: leer el código, comentar/cerrar tickets y lanzar corridas de tickets.
@@ -80,7 +81,7 @@ jobs:
           NTFY_TOPIC:    ${{ secrets.NTFY_TOPIC }}
           UPB_SALAS:     ${{ inputs.salas   || vars.UPB_SALAS   || '8,6,15,3' }}
           UPB_HORARIO:   ${{ inputs.horario || vars.UPB_HORARIO || '12:15-14:15' }}
-          UPB_DRY_RUN:   ${{ inputs.dry_run && '1' || '0' }}
+          UPB_DRY_RUN:   "${{ (inputs.dry_run == true || inputs.dry_run == 'true') && '1' || '0' }}"
           UPB_APERTURA_BO: '20:00'
           UPB_HASTA_BO:    ${{ inputs.minutos == '' && '21:15' || '' }}   # termina a las 21:15 BO
           UPB_MAX_MINUTOS: ${{ inputs.minutos || '340' }}                 # tope de seguridad
@@ -100,4 +101,6 @@ jobs:
         if: always() && inputs.ticket != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh issue edit "${{ inputs.ticket }}" --repo "${{ github.repository }}" --remove-label en-curso || true
+          TICKET: ${{ inputs.ticket }}
+          REPO: ${{ github.repository }}
+        run: gh issue edit "$TICKET" --repo "$REPO" --remove-label en-curso || true

@@ -448,3 +448,43 @@ def test_workflow_tickets_en_carriles_propios():
     assert "actions: write" in yml and "issues: write" in yml
     assert "if: always() && inputs.ticket != ''" in yml and "--remove-label en-curso" in yml
     assert "run-name:" in yml and "Solicitud #{0}" in yml   # el estado público se ve sin datos personales
+
+
+def _textos_yaml(nodo):
+    if isinstance(nodo, dict):
+        for k, v in nodo.items():
+            yield from _textos_yaml(k)
+            yield from _textos_yaml(v)
+    elif isinstance(nodo, list):
+        for v in nodo:
+            yield from _textos_yaml(v)
+    elif isinstance(nodo, str):
+        yield nodo
+
+
+def test_workflows_expresiones_cerradas_tras_leer_el_yaml():
+    """Lee los workflows COMO YAML (igual que GitHub). Un « #» sin comillas corta la línea
+    y deja un ${{ sin cerrar: así falló el run-name el 05/11/2026 (error 422 al aprobar)."""
+    import yaml
+    for ruta in (RAIZ / ".github" / "workflows").glob("*.yml"):
+        datos = yaml.safe_load(ruta.read_text(encoding="utf-8"))
+        for texto in _textos_yaml(datos):
+            abiertas, pos = 0, 0
+            while (i := texto.find("${{", pos)) != -1:
+                j = texto.find("}}", i)
+                assert j != -1, f"{ruta.name}: expresión sin cerrar tras leer el YAML: {texto!r}"
+                pos = j + 2
+        flujo = datos.get("run-name", "") if ruta.name == "reservar.yml" else ""
+        if ruta.name == "reservar.yml":
+            assert "Solicitud #{0}" in flujo, "el run-name perdió el texto tras el # (¿faltan comillas?)"
+
+
+def test_workflows_pasan_actionlint():
+    """actionlint valida los workflows como GitHub (sintaxis, expresiones, contextos, shell)."""
+    import shutil
+    import subprocess
+    binario = shutil.which("actionlint")
+    if not binario:
+        pytest.skip("actionlint no está instalado (en el CI sí corre)")
+    r = subprocess.run([binario, "-no-color", "-oneline"], cwd=RAIZ, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr

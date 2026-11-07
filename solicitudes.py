@@ -165,8 +165,9 @@ def titulo_ticket(fecha: date | str, horario: str, ref: str = "") -> str:
 class GitHubIssues:
     """Lee y actualiza las solicitudes. Errores de red: se registran y no detienen al bot."""
 
-    def __init__(self, repo: str, token: str, log=print):
-        self.base = f"https://api.github.com/repos/{repo}"
+    def __init__(self, repo: str, token: str, log=print, api: str | None = None):
+        api = (api or os.getenv("UPB_GH_API") or "https://api.github.com").rstrip("/")  # UPB_GH_API: solo para pruebas
+        self.base = f"{api}/repos/{repo}"
         self.s = requests.Session()
         self.s.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
                                "X-GitHub-Api-Version": "2022-11-28"})

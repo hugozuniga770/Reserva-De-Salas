@@ -355,7 +355,12 @@ const corridas = () => api(`/actions/workflows/${WF}/runs?per_page=40`).then((d)
 const activa = (r) => ["queued", "in_progress", "waiting", "pending", "requested"].includes(r.status);
 const nTicketDeCorrida = (r) => +((r.display_title || r.name || "").match(/^Solicitud #(\d+)/) || [])[1] || 0;
 const esTuya = (r) => !nTicketDeCorrida(r);
-async function despachar(inputs = {}) { await api(`/actions/workflows/${WF}/dispatches`, {metodo: "POST", cuerpo: {ref: "main", inputs}}); }
+// Si hay una corriendo y otra en cola en el mismo carril, la que importa es la que corre.
+const laActiva = (lista) => lista.find((r) => r.status === "in_progress") || lista.find(activa) || null;
+async function despachar(inputs = {}) {
+  const texto = Object.fromEntries(Object.entries(inputs).map(([k, v]) => [k, String(v)]));
+  await api(`/actions/workflows/${WF}/dispatches`, {metodo: "POST", cuerpo: {ref: "main", inputs: texto}});
+}
 async function ponerEtiquetas(n, etiquetas) { await api(`/issues/${n}/labels`, {metodo: "POST", cuerpo: {labels: etiquetas}}); }
 async function quitarEtiqueta(n, e) { try { await api(`/issues/${n}/labels/${encodeURIComponent(e)}`, {metodo: "DELETE"}); } catch (x) { if (x.estado !== 404) throw x; } }
 async function ticketsAbiertos() {
@@ -601,7 +606,7 @@ function mostrarParaEnviar(destino, tickets) {
 /* ───────────────────────── estado (público y admin) ───────────────────────── */
 function estadoTicket(issue, corridasLista) {
   const et = new Set((issue.labels || []).map((l) => l.name));
-  const run = corridasLista.find((r) => nTicketDeCorrida(r) === issue.number && activa(r));
+  const run = laActiva(corridasLista.filter((r) => nTicketDeCorrida(r) === issue.number && activa(r)));
   if (run) return run.status === "in_progress" ? ["En curso: el bot está vigilando", "ok"] : ["En cola para arrancar", "info"];
   if (et.has("reservada")) return ["Reservada", "ok"];
   if (et.has("sin-sala")) return ["No se consiguió sala", "mal"];
@@ -613,7 +618,7 @@ function estadoTicket(issue, corridasLista) {
   return ["Pendiente de aprobación", "av"];
 }
 function estadoBot(lista, publico = false) {
-  const tuya = lista.find((r) => esTuya(r) && activa(r));
+  const tuya = laActiva(lista.filter((r) => esTuya(r) && activa(r)));
   const m = minutosBO();
   const critico = m >= 18 * 60 + 45 && m <= 21 * 60 + 15;
   if (tuya) return tuya.status === "in_progress" ? {color: "verde", titulo: "Vigilando", texto: "El bot está corriendo ahora", run: tuya} : {color: "amarillo", titulo: "En cola", texto: "GitHub está por arrancarlo", run: tuya};
@@ -698,10 +703,10 @@ async function vistaInicio(c) {
           pie: bot.run ? "Ver registro" : null, alPie: () => bot.run && window.open(bot.run.html_url, "_blank")}),
         cuadro({color: "amarillo", titulo: String(tickets.length), texto: pend ? `Solicitudes · ${pend} sin revisar` : "Solicitudes abiertas", icono: "usuarios", pie: "Revisar", alPie: () => (location.hash = "#tickets")}),
         cuadro({color: "morado", titulo: salasTxt, texto: `Tu horario: ${fmtH(vars.UPB_HORARIO || "12:15-14:15")}`, icono: "cal", pie: "Cambiar", alPie: () => (location.hash = "#ajustes")}))].filter(Boolean));
-    const tuya = runs.find((r) => esTuya(r) && activa(r));
+    const tuya = laActiva(runs.filter((r) => esTuya(r) && activa(r)));
     acciones.replaceChildren(caja({tipo: "primary", titulo: "Acciones", icono: "play", cuerpo: h("div", {style: "display:grid;gap:8px"},
       boton("Correr bot ahora", "btn-primary btn-lg btn-block", (e) => correr(e.currentTarget, {}), "play"),
-      boton("Probar sin reservar", "btn-default btn-block", (e) => correr(e.currentTarget, {dry_run: true}), "matraz"),
+      boton("Probar sin reservar", "btn-default btn-block", (e) => correr(e.currentTarget, {dry_run: "true"}), "matraz"),
       tuya ? boton("Detener tu corrida", "btn-danger btn-block", (e) => accion(e.currentTarget, async () => { await api(`/actions/runs/${tuya.id}/cancel`, {metodo: "POST"}); aviso("Corrida detenida.", "ok"); setTimeout(cargar, 3000); }), "stop") : null,
       h("p", {class: "ayuda", style: "margin:4px 0 0"}, "Fuera de la noche (15:00–21:15) «Correr bot ahora» vigila 60 minutos buscando cancelaciones."))}));
     lista.replaceChildren(caja({tipo: "info", titulo: "Corridas recientes", icono: "lista", der: boton("", "btn-default btn-sm", () => cargar(), "recargar", {"aria-label": "Actualizar"}),
@@ -717,9 +722,9 @@ async function vistaInicio(c) {
   async function correr(b, inputs) {
     await accion(b, async () => {
       const m = minutosBO();
-      if (!inputs.dry_run && (m < 15 * 60 || m > 21 * 60 + 15)) inputs.minutos = "60";
+      if (inputs.dry_run !== "true" && (m < 15 * 60 || m > 21 * 60 + 15)) inputs.minutos = "60";
       await despachar(inputs);
-      aviso(inputs.dry_run ? "Prueba lanzada. Aparece en la lista en unos segundos." : "Bot lanzado. Aparece en la lista en unos segundos.", "ok");
+      aviso(inputs.dry_run === "true" ? "Prueba lanzada. Aparece en la lista en unos segundos." : "Bot lanzado. Aparece en la lista en unos segundos.", "ok");
       setTimeout(cargar, 4000);
     });
   }
@@ -776,9 +781,14 @@ async function filaTicket(t, runs, privada, recargar) {
   const fecha = (datos && datos.fecha) || fechaDeTitulo(t.title), hor = (datos && datos.horario) || horarioDeTitulo(t.title);
   const [txt, col] = estadoTicket(t, runs);
   const et = new Set(t.labels.map((l) => l.name));
-  const run = runs.find((r) => nTicketDeCorrida(r) === t.number && activa(r));
+  const run = laActiva(runs.filter((r) => nTicketDeCorrida(r) === t.number && activa(r)));
   const listo = listoParaLanzar(fecha);
-  const lanzar = async () => { await despachar({ticket: String(t.number)}); await ponerEtiquetas(t.number, ["en-curso"]); };
+  const lanzar = async () => {
+    // Fuera de la tarde/noche (15:00–21:15) la corrida vigila 60 min buscando cancelaciones.
+    const m = minutosBO(), inputs = {ticket: String(t.number)};
+    if (m < 15 * 60 || m > 21 * 60 + 15) inputs.minutos = "60";
+    await despachar(inputs); await ponerEtiquetas(t.number, ["en-curso"]);
+  };
   return h("div", {class: "ticket"},
     h("div", {class: "ticket-cab"}, h("b", null, datos ? `${datos.nombre} ${datos.apellido}` : `Solicitud #${t.number}`), h("span", {class: `etq ${col}`}, txt)),
     h("div", {class: "meta"}, `${fecha ? fechaLarga(fecha) : "sin fecha"} · ${hor ? fmtH(hor) : ""}${datos ? ` · código •••${datos.codigo.slice(-3)}` : ""} · #${t.number} · enviado por @${t.user.login}`),
@@ -926,7 +936,7 @@ async function vistaGuia(c) {
       linea(`${location.origin}${location.pathname}#pedir`)),
     paso(8, "success", "Prueba final", h("span"),
       h("p", null, "Lanza una corrida que revisa todo sin reservar nada."),
-      boton("Probar sin reservar", "btn-success", (e) => accion(e.currentTarget, async () => { await despachar({dry_run: true}); aviso("Prueba lanzada. Mírala en Inicio → Corridas recientes.", "ok"); }), "matraz")));
+      boton("Probar sin reservar", "btn-success", (e) => accion(e.currentTarget, async () => { await despachar({dry_run: "true"}); aviso("Prueba lanzada. Mírala en Inicio → Corridas recientes.", "ok"); }), "matraz")));
 
   function mostrarSecreto(privada) {
     secreto.replaceChildren(h("div", {class: "callout warning", style: "margin-top:10px"},

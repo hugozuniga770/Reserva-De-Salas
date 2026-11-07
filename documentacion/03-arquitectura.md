@@ -115,6 +115,7 @@ Cada corrida de ticket usa el carril de concurrencia `upb-ticket-<número>`. As�
 | D-09 | Panel estático en GitHub Pages. Token y llave solo en el navegador | Backend propio; artifact alojado | Gratis y sin servidor. Un artifact alojado no puede llamar a la API de GitHub |
 | D-10 | Estilo UPBnet, logo enlazado desde su URL oficial y aviso «no oficial» | Diseño propio; copiar el logo al repositorio | Pedido del responsable. No se redistribuye la marca. El servidor de la UPB responde 403 a algunos orígenes, por eso hay respaldo de texto |
 | D-11 | Liberar el ticket con un paso `if: always()` | Confiar en que el bot siempre termina bien | Si la corrida se cancela o vence, el ticket no queda trabado en «en curso» |
+| D-12 | Toda expresión `${{ }}` que lleve `#`, `:` o llaves va entre comillas, y el CI valida con actionlint | Confiar en la revisión visual | En YAML « #» inicia un comentario: el incidente C-10 dejó el workflow inválido sin que ninguna prueba lo notara |
 
 ## 5. Limitaciones conocidas
 

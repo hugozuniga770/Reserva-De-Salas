@@ -71,7 +71,13 @@ class GitHubFalso:
         if r == "/actions/workflows/reservar.yml":
             return 200, {"id": 1}
         if r == "/actions/workflows/reservar.yml/dispatches" and metodo == "POST":
-            self.despachos.append(cuerpo["inputs"])
+            # Igual que GitHub: el workflow debe ser válido y las entradas, conocidas y de texto.
+            permitidas = {"ticket", "salas", "horario", "minutos", "dry_run"}
+            entradas = cuerpo.get("inputs", {})
+            if cuerpo.get("ref") != "main" or set(entradas) - permitidas or \
+                    not all(isinstance(v, str) for v in entradas.values()):
+                return 422, {"message": f"Entradas no válidas: {entradas}"}
+            self.despachos.append(entradas)
             return 204, None
         m = re.fullmatch(r"/actions/runs/(\d+)/cancel", r)
         if m:
@@ -221,7 +227,24 @@ def main():
         pag.click("text=Arrancarlo ahora")
         pag.wait_for_selector("text=Bot lanzado")
         assert gh.despachos[-1] == {}, gh.despachos
+        pag.click("text=Probar sin reservar")
+        pag.wait_for_selector("text=Prueba lanzada")
+        assert gh.despachos[-1] == {"dry_run": "true"}, gh.despachos
         resultados["arrancar_desde_alerta"] = "OK"
+        # Carril con una corrida tuya corriendo y otra más nueva en cola: debe decir «Vigilando»
+        gh.runs[:0] = [
+            {"id": 601, "display_title": "Tu reserva", "status": "queued", "conclusion": None, "event": "schedule",
+             "run_started_at": None, "created_at": "2026-11-05T22:41:00Z", "html_url": "https://github.com/x/runs/601"},
+            {"id": 600, "display_title": "Tu reserva", "status": "in_progress", "conclusion": None, "event": "schedule",
+             "run_started_at": "2026-11-05T19:47:00Z", "created_at": "2026-11-05T19:47:00Z", "html_url": "https://github.com/x/runs/600"}]
+        pag.goto(base + "#estado")
+        pag.goto(base + "#inicio")
+        pag.wait_for_selector("text=Vigilando")
+        pag.click("text=Detener tu corrida")
+        pag.wait_for_selector("text=Corrida detenida")
+        assert ("POST", f"/repos/{REPO}/actions/runs/600/cancel") in gh.llamadas, "debe detener la que corre, no la de la cola"
+        del gh.runs[:2]
+        resultados["corriendo_vs_en_cola"] = "OK"
 
         pag.goto(base + "#tickets")
         pag.wait_for_selector("text=Ana María Pérez Soto")
@@ -229,9 +252,11 @@ def main():
         pag.screenshot(path=CAPTURAS / "06-solicitudes.png", full_page=True)
         # Aprobar el #13 (10 nov): todavía no toca lanzarlo → solo etiqueta
         fila = pag.locator(".ticket", has_text="Luis Pérez Soto")
+        antes = len(gh.despachos)
         fila.locator("text=Aprobar").click()
         pag.wait_for_selector("text=Aprobada. Su corrida se lanza sola")
-        assert "aprobada" in [x["name"] for x in gh.issues[13]["labels"]] and gh.despachos[-1] == {}
+        assert "aprobada" in [x["name"] for x in gh.issues[13]["labels"]]
+        assert len(gh.despachos) == antes, "un ticket del 10/11 no se lanza el 05/11"
         # Quitar y borrar el #12 (cancela su corrida en curso)
         pag.once("dialog", lambda d: d.accept())
         pag.locator(".ticket", has_text="Ana María Pérez Soto").locator("text=Quitar y borrar datos").click()

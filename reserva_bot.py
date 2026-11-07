@@ -805,8 +805,9 @@ class Bot:
         if latido_hecho or aviso_tarde_hecho or self.ticket:
             for per in self.personas:
                 if not per.es_duenio and not per.cerrada and per.hecha_en is None and per.fecha == ultimo_hoy \
-                        and (latido_hecho or self.horario_ya_paso(ultimo_hoy, cfg.reloj(), per.horario)
-                             or self.fin_por_reloj(ahora0) is not None):
+                        and (latido_hecho or self.horario_ya_paso(ultimo_hoy, cfg.reloj(), per.horario)):
+                    # Solo si tuvo su oportunidad (vigiló la apertura) o su horario ya pasó.
+                    # Si se lanzó tarde (p. ej. aprobado a las 22:54), queda abierto y se relanza.
                     self.resumen.append(f"{per.etiqueta}: sin sala ❌")
                     self.notificar(f"❌ No se consiguió sala para {per.fecha}.", topic=per.ntfy)
                     self.cerrar_solicitud(per, "sin-sala", f"❌ No se consiguió sala para {per.fecha}.")

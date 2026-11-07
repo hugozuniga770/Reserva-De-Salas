@@ -338,6 +338,21 @@ def main():
         resultados["llave_desde_telefono"] = "OK"
         pag.screenshot(path=CAPTURAS / "08-guia.png", full_page=True)
 
+        # Viernes 19:20: el plazo del sábado venció; el siguiente día reservable es el lunes (domingo no).
+        pv = nav.new_context(viewport={"width": 390, "height": 844}, locale="es-BO", color_scheme="dark")
+        pv.route("**/*", enrutar)
+        pvp = pv.new_page()
+        pvp.on("pageerror", lambda e: errores.append(f"pageerror(viernes): {e}"))
+        pvp.clock.set_fixed_time("2026-11-06T19:20:00-04:00")
+        pvp.goto(base + "#pedir")
+        pvp.wait_for_selector("text=Ya pasó el plazo para el sáb. 7 de noviembre")
+        pvp.wait_for_selector("text=Para el lun. 9 de noviembre tienes hasta el dom. 8 de noviembre a las 18:30")
+        assert pvp.locator("text=Para el dom. 8").count() == 0, "nunca debe ofrecer un domingo"
+        caja_barra = pvp.locator("#usuario-barra").bounding_box()
+        assert caja_barra["x"] + caja_barra["width"] <= 390 + 0.5, f"la barra se sale de la pantalla: {caja_barra}"
+        pvp.screenshot(path=CAPTURAS / "11-viernes-celular-oscuro.png")
+        resultados["plazos_saltan_domingo_y_barra_cabe"] = "OK"
+
         # Copia publicada en otro dominio: no funciona
         pc = nav.new_context(viewport={"width": 390, "height": 844}, locale="es-BO")
         pc.route("**/*", enrutar)

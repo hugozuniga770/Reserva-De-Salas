@@ -32,7 +32,7 @@
 :root[data-theme="dark"]{--fondo:#1d1f22;--caja:#26292d;--texto:#e6e6e6;--suave:#a5a5a5;--linea:#33373c;--borde:#3d4247;
   --t-ok:#b9e3b5;--f-ok:#1f3a24;--t-info:#b7dcf0;--f-info:#173246;--t-av:#f3dfa8;--f-av:#3b3214;--t-mal:#f3b9b7;--f-mal:#432222;color-scheme:dark}
 *{box-sizing:border-box}
-html{scroll-padding-top:calc(50px + env(safe-area-inset-top,0px))}
+html{scroll-padding-top:calc(54px + env(safe-area-inset-top,0px))}
 body{margin:0;font:14px/1.42857 var(--cuerpo);color:var(--texto);background:var(--fondo);-webkit-text-size-adjust:100%}
 h1,h2,h3,h4{font-family:var(--titulos);font-weight:500;line-height:1.1;margin:0}
 a{color:var(--azul)}
@@ -41,18 +41,40 @@ button,input,select,textarea{font:inherit;color:inherit}
 .oculto{display:none!important}
 
 /* Cabecera: logo oscuro + barra blanca */
-.cabecera{position:fixed;inset:0 0 auto;z-index:30;display:flex;height:calc(50px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px);background:#fff;border-bottom:1px solid #eee}
+.cabecera{position:fixed;inset:0 0 auto;z-index:30;display:flex;height:calc(54px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px);
+  background:linear-gradient(90deg,#333 0,#2d3035 55%,#26292d 100%);box-shadow:0 2px 10px rgba(0,0,0,.25)}
+/* Franja con los colores de las salas (F, D, B, C, G, H): el sello del panel */
+.cabecera::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;
+  background:linear-gradient(90deg,#605ca8 0 16.66%,#00a65a 16.66% 33.33%,#f39c12 33.33% 50%,#f56954 50% 66.66%,#00c0ef 66.66% 83.33%,#3c8dbc 83.33% 100%)}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--logo);z-index:31}
 .logo{flex:0 0 220px;display:flex;align-items:center;justify-content:center;background:var(--logo);color:#f9f9f9;text-decoration:none;padding:0 10px}
 .logo img{max-height:34px;max-width:180px;display:block}
 .logo .marca{font:italic 600 22px/1 var(--titulos);letter-spacing:.5px}
-.barra{flex:1;display:flex;align-items:center;justify-content:space-between;color:#333}
+.barra{flex:1;display:flex;align-items:center;gap:10px;color:#eee;padding-right:12px;border-left:1px solid rgba(255,255,255,.06);min-width:0}
+.barra-titulo{display:flex;flex-direction:column;line-height:1.15;min-width:0;padding-left:16px}
+.barra-titulo b{font:600 15px var(--titulos);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.barra-titulo small{font-size:11px;color:#a9adb3;white-space:nowrap}
+.barra-der{margin-left:auto;display:flex;align-items:center;gap:12px}
+.pastilla{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font:600 12px/1 var(--titulos);
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);color:#eee;white-space:nowrap;text-decoration:none}
+.pastilla .p{width:8px;height:8px;border-radius:50%;background:#999;flex:none}
+.pastilla.verde .p{background:#2ecc71;box-shadow:0 0 0 0 rgba(46,204,113,.6);animation:latido 1.8s infinite}
+.pastilla.amarillo .p{background:var(--amarillo)}.pastilla.rojo .p{background:var(--rojo)}.pastilla.aqua .p{background:var(--aqua)}
+.pastilla.rojo{background:rgba(245,105,84,.18);border-color:rgba(245,105,84,.45)}
+@keyframes latido{70%{box-shadow:0 0 0 7px rgba(46,204,113,0)}100%{box-shadow:0 0 0 0 rgba(46,204,113,0)}}
+.reloj{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;color:#cfd2d6}
+.reloj b{font:600 15px var(--titulos);font-variant-numeric:tabular-nums;color:#fff}
+.reloj small{font-size:10px;color:#9a9ea4}
+.chip-usuario{display:flex;align-items:center;gap:8px;padding-left:12px;border-left:1px solid rgba(255,255,255,.1);color:#eee;text-decoration:none}
+.chip-usuario .av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font:700 14px var(--titulos);color:#fff;
+  background:linear-gradient(135deg,#605ca8,#3c8dbc);box-shadow:0 0 0 2px rgba(255,255,255,.15)}
+.chip-usuario .nom{display:flex;flex-direction:column;line-height:1.15}
+.chip-usuario .nom b{font-size:13px;color:#fff}.chip-usuario .nom small{font-size:11px;color:#a9adb3}
 .hamburguesa{width:48px;height:48px;border:0;background:transparent;display:none;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer}
-.hamburguesa span{display:block;width:22px;height:2px;border-radius:4px;background:#333}
-.usuario{font-weight:700;margin-right:15px;display:flex;align-items:center;gap:6px;color:#333}
+.hamburguesa span{display:block;width:22px;height:2px;border-radius:4px;background:#eee}
 
 /* Lateral oscuro */
-.lateral{position:fixed;z-index:25;top:calc(50px + env(safe-area-inset-top,0px));bottom:0;left:0;width:220px;background:var(--lado);overflow-y:auto;border-bottom:1px solid #333;transition:transform .2s ease}
+.lateral{position:fixed;z-index:25;top:calc(54px + env(safe-area-inset-top,0px));bottom:0;left:0;width:220px;background:var(--lado);overflow-y:auto;border-bottom:1px solid #333;transition:transform .2s ease}
 .panel-usuario{display:flex;gap:10px;align-items:center;padding:12px 10px;color:var(--lado-texto)}
 .avatar{width:45px;height:45px;border-radius:50%;border:1px solid #444;background:#555;display:grid;place-items:center;font:600 18px var(--titulos);color:#fff}
 .panel-usuario b{display:block;font-size:14px;margin-bottom:6px}
@@ -69,11 +91,11 @@ body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset
 .velo{display:none}
 
 /* Contenido */
-.derecha{margin-left:220px;padding-top:calc(50px + env(safe-area-inset-top,0px));padding-bottom:calc(30px + env(safe-area-inset-bottom,0px));min-height:100vh}
+.derecha{margin-left:220px;padding-top:calc(54px + env(safe-area-inset-top,0px));padding-bottom:calc(30px + env(safe-area-inset-bottom,0px));min-height:100vh}
 .encabezado{padding:15px 15px 10px 20px;position:relative}
 .encabezado h1{font-size:24px}
 .encabezado h1 small{font-size:15px;font-weight:300;padding-left:4px;color:var(--suave)}
-.migas{position:absolute;top:15px;right:10px;font-size:12px;padding:7px 5px;color:var(--suave);margin:0;list-style:none;display:flex;gap:5px}
+.migas{position:absolute;top:18px;right:14px;font-size:12px;padding:4px 10px;color:var(--suave);margin:0;list-style:none;display:flex;gap:5px;border:1px solid var(--borde);border-radius:999px}
 .migas li+li::before{content:"> "}
 .contenido{padding:0 15px 15px;max-width:1100px}
 .fila{display:grid;gap:15px}
@@ -215,11 +237,14 @@ textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospa
   body.menu-abierto .lateral{transform:none}
   body.menu-abierto .velo{display:block;position:fixed;inset:0;z-index:24;background:rgba(0,0,0,.35)}
   .derecha{margin-left:0}
-  .migas{position:relative;top:0;right:0;margin-top:6px;background:#efefef;padding:7px 8px}
-  :root[data-theme="dark"] .migas{background:#2c3035}
+  .migas{position:relative;top:0;right:0;margin-top:8px;display:inline-flex}
+  .barra-titulo,.chip-usuario .nom{display:none}
+  .barra{border-left:0}
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .migas{background:#2c3035}}
+@media (max-width:420px){.reloj small{display:none}.pastilla{padding:5px 9px}.chip-usuario{padding-left:8px}}
+@media (max-width:480px){.chip-usuario.publico{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media (max-width:992px){.cabecera .logo img{max-height:30px}}
 </style>
 </head>
 <body>
@@ -230,7 +255,8 @@ textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospa
   </a>
   <nav class="barra" aria-label="Barra superior">
     <button class="hamburguesa" id="hamburguesa" aria-label="Alternar navegación" aria-expanded="false"><span></span><span></span><span></span></button>
-    <span class="usuario" id="usuario-barra"></span>
+    <div class="barra-titulo" id="barra-titulo"><b>Reserva de Salas</b><small>UPB, sede Santa Cruz</small></div>
+    <div class="barra-der" id="usuario-barra"></div>
   </nav>
 </header>
 <aside class="lateral" id="lateral" aria-label="Menú">
@@ -328,12 +354,20 @@ async function cargarServicio() {
   _servicioCargado = true;
 }
 const aMin = (hhmm) => { const [hh, mm] = String(hhmm).split(":").map(Number); return hh * 60 + (mm || 0); };
-// Próximo día que abre en el sistema de la UPB (a las 20:00 del día anterior).
-const proximoDia = () => sumarDias(isoDe(boAhora()), minutosBO() < aMin(SERVICIO.apertura) ? 1 : 2);
+// Los domingos no se reserva (el calendario los bloquea): los plazos los saltan.
+const esDomingo = (iso) => new Date(iso + "T00:00:00Z").getUTCDay() === 0;
+function siguienteReservable(iso) { let d = iso; while (esDomingo(d)) d = sumarDias(d, 1); return d; }
+// Próximo día reservable que abre en el sistema de la UPB (a las 20:00 del día anterior).
+const proximoDia = () => siguienteReservable(sumarDias(isoDe(boAhora()), minutosBO() < aMin(SERVICIO.apertura) ? 1 : 2));
+function cuandoEs(iso) {
+  const hoy = isoDe(boAhora());
+  return iso === hoy ? "hoy" : iso === sumarDias(hoy, 1) ? "mañana" : `el ${fechaLarga(iso)}`;
+}
+// ¿El plazo de hoy está corriendo y ya venció? (entre las 18:30 y las 20:00 del día anterior al próximo día)
+const plazoVencidoHoy = () => { const m = minutosBO(); return sumarDias(proximoDia(), -1) === isoDe(boAhora()) && m >= aMin(SERVICIO.plazo) && m < aMin(SERVICIO.apertura); };
 function situacionDia(iso) {
   if (iso === fechaServidor()) return {clase: "cancel", texto: "ya abierto: solo cancelaciones, sin garantía"};
-  const m = minutosBO();
-  if (iso === proximoDia() && m >= aMin(SERVICIO.plazo) && m < aMin(SERVICIO.apertura)) return {clase: "tarde", texto: "pasó el plazo: sin garantía"};
+  if (iso === proximoDia() && plazoVencidoHoy()) return {clase: "tarde", texto: "pasó el plazo: sin garantía"};
   return {clase: "ok", texto: ""};
 }
 const bloqueada = (salaId, horario) => !!SERVICIO.bloqueo && SERVICIO.bloqueo.sala === String(salaId) && SERVICIO.bloqueo.horario === horario;
@@ -464,7 +498,7 @@ function dibujarMarco(vista) {
   $("#saludo").textContent = admin ? `Hola, ${nombre.split(" ")[0] || "administrador"}` : "Hola";
   $("#avatar").textContent = (admin ? (nombre[0] || "A") : "U").toUpperCase();
   $("#conexion").textContent = admin ? "Administrador" : "En línea";
-  $("#usuario-barra").replaceChildren(admin ? h("span", null, nombre || "Administrador") : h("span", null, "Reserva de Salas"));
+  pintarCabecera();
   $("#logo").setAttribute("href", admin ? "#inicio" : "#pedir");
   const item = (hash, txt, ic, extra) => h("li", null, h("a", {href: "#" + hash, class: vista === hash ? "activo" : null, onclick: () => document.body.classList.remove("menu-abierto")}, svg(ic), txt, extra || null));
   const m = $("#menu"); m.replaceChildren();
@@ -478,6 +512,37 @@ function dibujarMarco(vista) {
     m.append(item("pedir", "Pedir sala", "cal"), item("estado", "Estado de mis solicitudes", "ojo"), item("conectar", "Administrar", "candado"));
   }
 }
+/* Barra superior: estado en vivo + hora de Bolivia + usuario. */
+let ESTADO_BOT = null;  // lo actualiza Inicio y un sondeo suave (solo administrador)
+function pastillaEstado() {
+  const m = minutosBO();
+  if (esAdmin() && ESTADO_BOT) {
+    const b = ESTADO_BOT;
+    const texto = {verde: "Vigilando", amarillo: "En cola", rojo: "No corre", gris: b.texto.replace("Arranca solo a las ", "Dormido hasta ").replace("Arranca mañana a las ", "Dormido hasta ")}[b.color] || b.titulo;
+    return h("a", {class: `pastilla ${b.color}`, href: "#inicio", title: b.texto}, h("span", {class: "p"}), texto);
+  }
+  const limite = sumarDias(proximoDia(), -1), hoy = isoDe(boAhora());
+  if (m >= aMin(SERVICIO.apertura) && m < aMin(SERVICIO.fin) && !esDomingo(fechaServidor())) return h("span", {class: "pastilla verde"}, h("span", {class: "p"}), "Apertura en curso");
+  if (limite === hoy && m < aMin(SERVICIO.plazo)) return h("span", {class: "pastilla aqua", title: `Plazo para pedir el ${fechaLarga(proximoDia())}`}, h("span", {class: "p"}), `Plazo hoy ${SERVICIO.plazo}`);
+  if (plazoVencidoHoy()) return h("span", {class: "pastilla amarillo"}, h("span", {class: "p"}), `Apertura en ${duracion(aMin(SERVICIO.apertura) - m)}`);
+  return h("span", {class: "pastilla", title: `Plazo para el ${fechaLarga(proximoDia())}`}, h("span", {class: "p"}), `Plazo ${cuandoEs(limite)} ${SERVICIO.plazo}`);
+}
+function pintarCabecera() {
+  const admin = esAdmin(), nombre = guardado.get("nombre_mostrar") || "";
+  const a = boAhora(), hora = `${String(a.getUTCHours()).padStart(2, "0")}:${String(a.getUTCMinutes()).padStart(2, "0")}`;
+  $("#usuario-barra").replaceChildren(
+    pastillaEstado(),
+    h("div", {class: "reloj", title: "Hora de Bolivia"}, h("b", null, hora), h("small", null, "hora Bolivia")),
+    admin ? h("a", {class: "chip-usuario", href: "#ajustes", title: "Ajustes"},
+      h("span", {class: "av"}, (nombre[0] || "A").toUpperCase()),
+      h("span", {class: "nom"}, h("b", null, nombre.split(" ").slice(0, 2).join(" ") || "Administrador"), h("small", null, "Administrador")))
+      : h("a", {class: "chip-usuario publico", href: "#pedir"}, h("span", {class: "av"}, svg("cal")), h("span", {class: "nom"}, h("b", null, "Pedir sala"), h("small", null, "Estudiantes"))));
+}
+setInterval(() => { if (document.visibilityState === "visible" && DOMINIOS_AUTORIZADOS.includes(location.hostname)) pintarCabecera(); }, 30000);
+setInterval(async () => {  // estado del bot para la pastilla, cada 90 s, solo con token
+  if (!esAdmin() || document.visibilityState !== "visible" || !DOMINIOS_AUTORIZADOS.includes(location.hostname)) return;
+  try { ESTADO_BOT = estadoBot(await corridas()); pintarCabecera(); } catch {}
+}, 90000);
 function encabezado(titulo, sub, migas) {
   $("#titulo").replaceChildren(titulo, " ", h("small", null, sub));
   $("#migas").replaceChildren(...migas.map((m) => h("li", null, m)));
@@ -675,15 +740,20 @@ async function vistaPedir(c) {
       h("li", null, "Sigue tu solicitud en «Estado» con el código de referencia."))}))));
 }
 function avisoPlazo() {
-  const m = minutosBO(), d = proximoDia(), plazo = SERVICIO.plazo;
-  if (m < aMin(plazo)) return h("div", {class: "alerta alerta-ok"}, svg("reloj"), h("div", null,
+  const m = minutosBO(), hoy = isoDe(boAhora()), d = proximoDia(), limite = sumarDias(d, -1), plazo = SERVICIO.plazo;
+  if (plazoVencidoHoy()) {
+    const d2 = siguienteReservable(sumarDias(d, 1));
+    return h("div", {class: "alerta alerta-av"}, svg("alerta"), h("div", null,
+      h("b", null, `Ya pasó el plazo para el ${fechaLarga(d)} (${plazo}). `),
+      `Si pides igual, se intenta sin garantía. Para el ${fechaLarga(d2)} tienes hasta ${cuandoEs(sumarDias(d2, -1))} a las ${plazo}.`));
+  }
+  if (limite === hoy && m < aMin(plazo)) return h("div", {class: "alerta alerta-ok"}, svg("reloj"), h("div", null,
     h("b", null, `Para el ${fechaLarga(d)} puedes pedir hasta hoy a las ${plazo}. `), `Te quedan ${duracion(aMin(plazo) - m)}.`));
-  if (m < aMin(SERVICIO.apertura)) return h("div", {class: "alerta alerta-av"}, svg("alerta"), h("div", null,
-    h("b", null, `Ya pasó el plazo para el ${fechaLarga(d)} (${plazo}). `),
-    `Si pides igual, se intenta sin garantía. Para el ${fechaLarga(sumarDias(d, 1))} tienes hasta mañana a las ${plazo}.`));
-  return h("div", {class: "alerta alerta-av"}, svg("alerta"), h("div", null,
-    h("b", null, `Las reservas del ${fechaLarga(fechaServidor())} ya abrieron a las ${SERVICIO.apertura}. `),
-    `Para ese día no se asegura la reserva: solo se buscan cancelaciones. Para el ${fechaLarga(d)} tienes hasta mañana a las ${plazo}.`));
+  const srv = fechaServidor(), abierto = m >= aMin(SERVICIO.apertura) && !esDomingo(srv);
+  return h("div", {class: `alerta ${abierto ? "alerta-av" : "alerta-ok"}`}, svg(abierto ? "alerta" : "reloj"), h("div", null,
+    abierto ? h("b", null, `Las reservas del ${fechaLarga(srv)} ya abrieron a las ${SERVICIO.apertura}. `) : null,
+    abierto ? "Para ese día no se asegura la reserva: solo se buscan cancelaciones. " : null,
+    h("b", null, `Para el ${fechaLarga(d)} tienes hasta ${cuandoEs(limite)} a las ${plazo}.`)));
 }
 function cajaPlazos() {
   const b = SERVICIO.bloqueo, s = b && sala(b.sala);
@@ -764,7 +834,7 @@ async function vistaEstado(c) {
       cuadro({color: "aqua", titulo: cr.titulo, texto: cr.texto, icono: "reloj"}),
       cuadro({color: bot.color, titulo: bot.titulo, texto: `Bot principal: ${bot.texto}`, icono: "play"}),
       cuadro({color: "morado", titulo: String(tickets), texto: "Solicitudes corriendo ahora", icono: "usuarios"}),
-      cuadro({color: "amarillo", titulo: SERVICIO.plazo, texto: minutosBO() < aMin(SERVICIO.plazo) ? `Plazo para pedir el ${fechaLarga(proximoDia())}` : `Plazo vencido para el ${fechaLarga(proximoDia())}: sin garantía`, icono: "cal"})));
+      cuadro({color: "amarillo", titulo: SERVICIO.plazo, texto: plazoVencidoHoy() ? `Plazo vencido para el ${fechaLarga(proximoDia())}: sin garantía` : `Plazo para el ${fechaLarga(proximoDia())}: ${cuandoEs(sumarDias(proximoDia(), -1))}`, icono: "cal"})));
     const mias = guardado.json("mis_tickets", []);
     if (!mias.length) { lista.replaceChildren(h("div", {class: "vacio"}, "Todavía no tienes solicitudes en este teléfono. ", h("a", {href: "#pedir"}, "Pide una sala"), ".")); return; }
     lista.replaceChildren(...mias.slice().reverse().map((m) => {
@@ -799,6 +869,7 @@ async function vistaInicio(c) {
     const pend = tickets.filter((t) => !t.labels.some((l) => ["aprobada", "rechazada", "en-curso"].includes(l.name))).length;
     guardado.set("pendientes", String(pend)); dibujarMarco("inicio");
     const bot = estadoBot(runs), cr = cuentaRegresiva();
+    ESTADO_BOT = bot; pintarCabecera();
     const pausado = vars.UPB_PAUSADO === "1";
     const salasTxt = (vars.UPB_SALAS || "8,6,15,3").split(",").map((i) => (sala(i) || {}).l || i).join(" › ");
     zona.replaceChildren(...[
@@ -1106,7 +1177,7 @@ const SOLO_ADMIN = new Set(["inicio", "tickets", "ajustes", "guia"]);
 const DOMINIOS_AUTORIZADOS = ["hugozuniga770.github.io", "localhost", "127.0.0.1"];
 const OFICIAL = "https://hugozuniga770.github.io/Reserva-De-Salas/";
 function copiaNoAutorizada() {
-  $("#menu").replaceChildren(); $("#usuario-barra").replaceChildren();
+  $("#menu").replaceChildren(); $("#usuario-barra").replaceChildren(); $("#barra-titulo").replaceChildren();
   encabezado("Copia no autorizada", "servicio protegido", ["Inicio"]);
   $("#contenido").replaceChildren(h("div", {class: "callout danger"},
     h("h4", null, "Esta es una copia no autorizada"),

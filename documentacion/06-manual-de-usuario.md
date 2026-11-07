@@ -71,6 +71,8 @@ Abre el panel → **Administrar**, pega tu fine-grained token y sigue la **Guía
 
 ### B.2 Uso diario
 
+La **barra superior** siempre muestra el estado del bot (● Vigilando, En cola, No corre o Dormido hasta…), la hora de Bolivia y tu usuario; toca el estado para ir a Inicio. En la página pública, en lugar del estado del bot, muestra el plazo o la apertura en curso.
+
 - **Inicio**: arriba, **cómo terminó tu última corrida** (por ejemplo «Reservada ✅» o «No se liberó»). Debajo, la cuenta regresiva a las 20:00, el estado del bot, las solicitudes y tu configuración. En «Corridas recientes» cada corrida dice su resultado; la tabla completa está en [05 · Operación](05-operacion.md) §3. Botones: **Correr bot ahora**, **Probar sin reservar** y **Detener**. Si a la hora crítica el bot no corre, aparece una alerta roja con **Arrancarlo ahora**.
 - **Solicitudes**: ves nombre, fecha, salas y estado de cada solicitud.
   - **Aprobar**: si es su tarde, la lanza en su propia corrida. Si no, se lanzará sola el día anterior desde las 15:30.

@@ -4,7 +4,7 @@
 | :-- | :-- |
 | Proyecto | Reserva automática de salas de estudio, UPB sede Santa Cruz |
 | Responsable | Hugo Rafael Zúñiga Daza |
-| Versión | 3.3 |
+| Versión | 3.4 |
 | Fecha | 07/11/2026 |
 | Estado | En pruebas: verificado contra entornos simulados; falta la verificación en el sistema real (ver §8) |
 | Panel | `https://hugozuniga770.github.io/Reserva-De-Salas/` |
@@ -58,7 +58,7 @@ Manual completo: [06 · Manual de usuario](documentacion/06-manual-de-usuario.md
 pip install -r requirements.txt pytest
 python -m pytest -q                         # 87 casos
 pip install playwright && python -m playwright install chromium
-python tests/panel_e2e.py capturas          # panel en Chromium: 10 verificaciones
+python tests/panel_e2e.py capturas          # panel en Chromium: 11 verificaciones
 ```
 
 Matriz requisito ↔ prueba: [07 · Pruebas y trazabilidad](documentacion/07-pruebas-y-trazabilidad.md).

@@ -18,7 +18,7 @@
 | :-- | :-- | :-- | :--: |
 | Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo, y validación de los workflows (YAML como GitHub + actionlint) | `tests/test_reserva_bot.py` | 50 casos |
 | Tickets y cifrado | Corridas aisladas, despacho, privacidad, compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) y bot completo por HTTP con las variables de Actions | `tests/test_solicitudes.py` | 37 casos |
-| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 10 verificaciones |
+| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 11 verificaciones |
 
 Todas corren en GitHub Actions en cada push (`tests.yml`). El trabajo del panel sube las capturas como artefacto.
 
@@ -26,7 +26,7 @@ Todas corren en GitHub Actions en cada push (`tests.yml`). El trabajo del panel 
 pip install -r requirements.txt pytest
 python -m pytest -q                       # 87 casos
 pip install playwright && python -m playwright install chromium
-python tests/panel_e2e.py capturas        # 10 verificaciones + capturas
+python tests/panel_e2e.py capturas        # 11 verificaciones + capturas
 ```
 
 Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y ritmos de milisegundos, así que corren en segundos.
@@ -69,6 +69,7 @@ Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y r
 | Bot completo por HTTP como en Actions | RF-01, RF-12 | `test_corrida_de_ticket_completa_por_http`, `test_tu_corrida_lanza_tickets_por_http` | ✅ |
 | CA-07.1 y CA-07.2 Plazos, cuenta regresiva y marcas | RF-16 | `panel_e2e: plazos_y_bloqueo`, `panel_e2e: cifrado_pagina_a_bot` (exige confirmar el día sin garantía) | ✅ |
 | CA-07.3 Cierre explica que llegó tarde | RF-16 | `test_sin_sala_por_llegar_tarde_lo_explica` | ✅ |
+| Plazos saltan domingos; la barra cabe en un celular de 390 px | RF-16, RNF-05 | `panel_e2e: plazos_saltan_domingo_y_barra_cabe` | ✅ |
 | Configuración pública sin nombres (`servicio.json`) | RF-14, RF-16 | `panel_e2e: ajustes` | ✅ |
 | CA-08.1 Candado de repositorio | RF-17 | `test_el_bot_no_corre_en_copias_del_repositorio`, `test_el_bot_si_corre_en_el_repositorio_original`, `test_workflow_con_candado_al_repositorio_original` | ✅ |
 | CA-08.2 Candado de dominio | RF-17 | `panel_e2e: copia_no_autorizada` | ✅ |

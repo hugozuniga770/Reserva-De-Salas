@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Manual de usuario |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 | Revisado por | *(pendiente)* |
 | Estado | Borrador para revisión |
@@ -16,12 +16,24 @@ Panel: `https://hugozuniga770.github.io/Reserva-De-Salas/`
 
 ## Parte A — Estudiantes que piden sala
 
+### A.0 Cuándo pedir
+
+| Momento | Qué pasa |
+| :-- | :-- |
+| 20:00 del día anterior | El sistema de la UPB abre las reservas del día |
+| Desde las 15:30 | El bot se activa y lanza todas las solicitudes junto con la corrida principal |
+| **Hasta las 18:30 del día anterior** | **Plazo**: tu solicitud entra segura en la corrida de la apertura |
+| Después de las 18:30 | Se intenta, pero sin garantía (ámbar en el calendario) |
+| Después de las 20:00 | Ese día ya abrió: no se asegura la reserva, solo se buscan cancelaciones (rojo en el calendario) |
+
+La **Sala F de 12:15 a 14:15 no está disponible** (reservada por el servicio). La F en otros horarios sí.
+
 ### A.1 Pedir
 
 1. Abre el enlace que te pasaron (termina en `#pedir`).
 2. Escribe tu nombre, apellido y código **tal como figuran en UPBnet**.
 3. Elige el horario y toca las salas en tu orden de preferencia (1ª, 2ª…).
-4. En el calendario, toca uno o varios días. Cada día es una solicitud aparte. Los domingos no se pueden elegir.
+4. En el calendario, toca uno o varios días. Cada día es una solicitud aparte. Los domingos no se pueden elegir. Si eliges un día marcado en ámbar o rojo, tendrás que confirmar que entiendes que no hay garantía.
 5. Opcional: tu canal de **ntfy**, para recibir el resultado en el celular.
 6. Marca la autorización y toca **Preparar solicitud**.
 7. En cada día, toca **Enviar**. Se abre GitHub con todo listo: toca **Submit new issue**. Necesitas una cuenta de GitHub, que es gratis.
@@ -66,7 +78,7 @@ Abre el panel → **Administrar**, pega tu fine-grained token y sigue la **Guía
   - **Rechazar**: no se atenderá. Si estaba corriendo, se detiene.
   - **Quitar y borrar datos**: la cierra y borra lo cifrado.
   - **Agregar una solicitud** o **Pegar texto de WhatsApp**: para pedidos que te llegan por chat. Se crean ya aprobadas.
-- **Ajustes**: nombre, apellido, motivo, horario, orden de salas, auto-aprobación (on/off y hora), personas por noche y pausa.
+- **Ajustes**: nombre, apellido, motivo, horario, orden de salas, auto-aprobación (on/off y hora), personas por noche y pausa. Al guardar, la página pública se actualiza sola: tu primera sala en tu horario aparece como «no disponible» y la hora de auto-aprobación es el plazo que ven los solicitantes. Esto crea un commit: después corre `git pull` en tu PC antes de subir algo.
 
 ### B.3 Varios teléfonos
 

@@ -128,11 +128,13 @@ class GitHubFalso:
                 return 200, self.comentarios.get(n, [])
         if r == "/contents/docs":
             return 200, []
-        if r == "/contents/docs/clave_publica.txt":
+        m = re.fullmatch(r"/contents/docs/([\w.]+)", r)
+        if m:
+            nombre = m.group(1)
             if metodo == "PUT":
-                self.contenido["clave_publica.txt"] = base64.b64decode(cuerpo["content"]).decode().strip()
+                self.contenido[nombre] = base64.b64decode(cuerpo["content"]).decode("utf-8").strip()
                 return 201, {}
-            if "clave_publica.txt" in self.contenido:
+            if nombre in self.contenido:
                 return 200, {"sha": "abc"}
             return 404, {"message": "Not Found"}
         return 404, {"message": f"Ruta no simulada: {metodo} {r}"}
@@ -163,6 +165,12 @@ def main():
         if u.path.endswith("clave_publica.txt"):
             txt = gh.contenido.get("clave_publica.txt", PUB)
             return route.fulfill(status=200, body=txt + "\n", headers={"Content-Type": "text/plain"})
+        if u.hostname == "copia.example":  # alguien publicó una copia en otro dominio
+            ruta = RAIZ / "docs" / (u.path.lstrip("/") or "index.html")
+            if ruta.is_file():
+                tipo = "text/html" if ruta.suffix == ".html" else "application/javascript" if ruta.suffix == ".js" else "text/plain"
+                return route.fulfill(status=200, body=ruta.read_bytes(), headers={"Content-Type": tipo})
+            return route.fulfill(status=404, body="")
         if u.hostname not in ("127.0.0.1",):
             return route.abort()  # fuentes y logo externos: sin red en la prueba
         return route.continue_()
@@ -180,6 +188,21 @@ def main():
         pag.goto(base + "#pedir")
         pag.wait_for_selector("#t-nombre")
         pag.screenshot(path=CAPTURAS / "01-pedir.png", full_page=True)
+        # Plazos (19:20: ya pasó el plazo de las 18:30 para el viernes 6, todavía no abre)
+        pag.wait_for_selector("text=Ya pasó el plazo para el vie. 6 de noviembre")
+        pag.wait_for_selector("text=no disponible (reservada por el servicio)")
+        clase = lambda etiqueta: pag.get_attribute(f'button[aria-label^="{etiqueta}"]', "class") or ""
+        assert "cancel" in clase("jue. 5 de noviembre"), "hoy ya está abierto: solo cancelaciones"
+        assert "tarde" in clase("vie. 6 de noviembre"), "mañana: pasó el plazo"
+        assert "tarde" not in clase("lun. 9 de noviembre") and "cancel" not in clase("lun. 9 de noviembre")
+        # Sala F bloqueada solo de 12:15 a 14:15
+        f_boton = '.sala-opcion[aria-label^="Sala de estudio F"], .sala-opcion:has-text("Sala F")'
+        assert pag.is_disabled(f_boton), "la F de 12:15 debe estar bloqueada"
+        pag.click("text=10:00 – 12:00")
+        assert not pag.is_disabled(f_boton), "la F a otra hora sí se puede"
+        pag.click("text=12:15 – 14:15")
+        assert pag.is_disabled(f_boton)
+        resultados["plazos_y_bloqueo"] = "OK"
         pag.fill("#t-nombre", "Ana María")
         pag.fill("#t-apellido", "Pérez Soto")
         pag.fill("#t-codigo", "81234")
@@ -189,6 +212,9 @@ def main():
         pag.click('button[aria-label^="lun. 9 de noviembre"]')
         assert pag.is_disabled('button[aria-label^="dom. 8 de noviembre"]'), "los domingos deben estar bloqueados"
         pag.check("#t-ok")
+        pag.click("text=Preparar 2 solicitudes")
+        pag.wait_for_selector("text=Marca que entiendes que esos días no tienen garantía")  # el viernes llegó tarde
+        pag.check("#t-riesgo")
         pag.screenshot(path=CAPTURAS / "02-pedir-lleno.png", full_page=True)
         pag.click("text=Preparar 2 solicitudes")
         pag.wait_for_selector("text=2 solicitudes listas")
@@ -276,6 +302,9 @@ def main():
         v = gh.variables
         assert v["UPB_HORARIO"] == "10:00-12:00" and v["UPB_PROPOSITO"] == "Proyecto de software" and v["UPB_PAUSADO"] == "1", v
         assert v["UPB_SALAS"] == "8,6,15,3", v
+        pub = json.loads(gh.contenido["servicio.json"])  # el bloqueo público sigue a tus ajustes
+        assert pub["bloqueo"] == {"sala": "8", "horario": "10:00-12:00"} and pub["plazo"] == "18:30", pub
+        assert "Hugo" not in gh.contenido["servicio.json"] and "95503" not in gh.contenido["servicio.json"]
         resultados["ajustes"] = "OK"
 
         pag.goto(base + "#guia")
@@ -291,6 +320,17 @@ def main():
         assert sol.descifrar(tok, sol.cargar_clave_privada(nueva_priv)) == {"x": 1}  # la llave creada en el teléfono sirve al bot
         resultados["llave_desde_telefono"] = "OK"
         pag.screenshot(path=CAPTURAS / "08-guia.png", full_page=True)
+
+        # Copia publicada en otro dominio: no funciona
+        pc = nav.new_context(viewport={"width": 390, "height": 844}, locale="es-BO")
+        pc.route("**/*", enrutar)
+        pcp = pc.new_page()
+        pcp.on("pageerror", lambda e: errores.append(f"pageerror(copia): {e}"))
+        pcp.goto("http://copia.example/#pedir")
+        pcp.wait_for_selector("text=Esta es una copia no autorizada")
+        assert pcp.query_selector("#t-nombre") is None
+        pcp.screenshot(path=CAPTURAS / "10-copia-no-autorizada.png")
+        resultados["copia_no_autorizada"] = "OK"
 
         # Escritorio
         esc = nav.new_context(viewport={"width": 1280, "height": 800}, locale="es-BO")

@@ -1,0 +1,24 @@
+Bot de Reserva de Salas UPB
+Copyright (c) 2026 Hugo Rafael Zúñiga Daza. Todos los derechos reservados.
+
+Este repositorio es público solo para que se pueda VER y auditar su código.
+Hacerlo público NO concede ninguna licencia de uso.
+
+Está permitido, únicamente:
+  - Ver el código en GitHub.
+  - Hacer "fork" dentro de GitHub, en la medida en que lo exigen los Términos de
+    Servicio de GitHub, sin ejecutarlo ni publicarlo.
+  - Usar el servicio como solicitante a través del enlace oficial publicado por el autor.
+
+Sin autorización previa y por escrito del autor, NO está permitido:
+  - Copiar, modificar, adaptar o traducir el código, total o parcialmente.
+  - Ejecutar, desplegar o publicar este software o un servicio derivado de él
+    (incluidos workflows de GitHub Actions y páginas de GitHub Pages).
+  - Distribuir, sublicenciar, vender o presentar el trabajo como propio.
+
+El software se ofrece "tal cual", sin garantías de ningún tipo. El autor no es
+responsable de daños derivados de su uso. Proyecto estudiantil: no es un sistema
+oficial de la Universidad Privada Boliviana (UPB).
+
+Solicitudes de permiso o reportes de copias no autorizadas: abrir un issue en
+https://github.com/hugozuniga770/Reserva-De-Salas o contactar al autor.

@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Plan de pruebas y matriz de trazabilidad |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 | Revisado por | *(pendiente)* |
 | Estado | Borrador para revisión |
@@ -16,17 +16,17 @@
 
 | Nivel | Qué cubre | Archivo | Cantidad |
 | :-- | :-- | :-- | :--: |
-| Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo, y validación de los workflows (YAML como GitHub + actionlint) | `tests/test_reserva_bot.py` | 37 casos |
-| Tickets y cifrado | Corridas aisladas, despacho, privacidad, compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) y bot completo por HTTP con las variables de Actions | `tests/test_solicitudes.py` | 29 casos |
-| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 7 verificaciones |
+| Unitarias e integración | Bot contra un servidor falso que imita la página real (incluido el HTML guardado), con escenarios de fallo, y validación de los workflows (YAML como GitHub + actionlint) | `tests/test_reserva_bot.py` | 41 casos |
+| Tickets y cifrado | Corridas aisladas, despacho, privacidad, compatibilidad navegador ↔ bot (Node ejecuta `docs/cifrado.js`) y bot completo por HTTP con las variables de Actions | `tests/test_solicitudes.py` | 33 casos |
+| De punta a punta | Panel en Chromium real (390×844) con una API de GitHub simulada que rechaza entradas inválidas | `tests/panel_e2e.py` | 9 verificaciones |
 
 Todas corren en GitHub Actions en cada push (`tests.yml`). El trabajo del panel sube las capturas como artefacto.
 
 ```bash
 pip install -r requirements.txt pytest
-python -m pytest -q                       # 66 casos
+python -m pytest -q                       # 74 casos
 pip install playwright && python -m playwright install chromium
-python tests/panel_e2e.py capturas        # 7 verificaciones + capturas
+python tests/panel_e2e.py capturas        # 9 verificaciones + capturas
 ```
 
 Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y ritmos de milisegundos, así que corren en segundos.
@@ -43,7 +43,7 @@ Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y r
 | Reserva normal y campos del formulario | RF-01 | `test_reserva_normal_se_confirma`, `test_parsea_pagina_real_guardada`, `test_ids_del_formulario_son_md5_del_horario` | ✅ |
 | CA-02.1 Respaldo en orden F→D→B→C | RF-03 | `test_orden_preferido_f_d_b_c_solo_salas_de_estudio`, `test_salas_de_respaldo_en_orden` | ✅ |
 | CA-02.2 Solo salas de estudio | RF-03 | `test_salas_por_defecto_desde_entorno_es_fdbc_sin_lectura`, `test_ticket_solo_salas_de_estudio` | ✅ |
-| CA-02.3 Prioridad de tu sala favorita | RF-14 | `test_ticket_respeta_tu_sala_favorita_al_abrir` | ✅ |
+| CA-02.3 Sala del servicio no disponible | RF-14 | `test_nadie_puede_pedir_la_sala_del_servicio_en_su_horario`, `test_si_pide_f_y_otras_se_quita_la_f`, `test_la_f_en_otro_horario_si_se_puede`, `test_en_plena_apertura_un_ticket_nunca_intenta_la_sala_del_servicio`, `panel_e2e: plazos_y_bloqueo` | ✅ |
 | Ventanas de vigilancia | RF-04 | `test_nucleo_y_banda_de_apertura`, `test_espera_la_apertura_de_las_20_y_reserva_el_dia_siguiente` | ✅ |
 | CA-03.1 Fin por reloj | RF-05 | `test_fin_por_reloj_no_depende_de_la_hora_de_arranque`, `test_workflow_bien_configurado` | ✅ |
 | CA-03.2 Arranque tardío avisa | RF-05, RF-06 | `test_arranque_tardio_sin_reserva_avisa_y_termina_en_rojo`, `test_arranque_tardio_igual_toma_una_sala_si_esta_libre` | ✅ |
@@ -67,6 +67,12 @@ Las pruebas que dependen del tiempo usan un reloj inyectado (`Config.reloj`) y r
 | Ticket aprobado de noche no se cierra sin vigilar (C-11) | RF-12 | `test_ticket_aprobado_de_noche_no_se_cierra_sin_vigilar`, `test_ticket_lanzado_de_noche_con_minutos_vigila_cancelaciones` | ✅ |
 | Corrida activa sobre la de la cola (C-12) | RF-07 | `panel_e2e: corriendo_vs_en_cola` | ✅ |
 | Bot completo por HTTP como en Actions | RF-01, RF-12 | `test_corrida_de_ticket_completa_por_http`, `test_tu_corrida_lanza_tickets_por_http` | ✅ |
+| CA-07.1 y CA-07.2 Plazos, cuenta regresiva y marcas | RF-16 | `panel_e2e: plazos_y_bloqueo`, `panel_e2e: cifrado_pagina_a_bot` (exige confirmar el día sin garantía) | ✅ |
+| CA-07.3 Cierre explica que llegó tarde | RF-16 | `test_sin_sala_por_llegar_tarde_lo_explica` | ✅ |
+| Configuración pública sin nombres (`servicio.json`) | RF-14, RF-16 | `panel_e2e: ajustes` | ✅ |
+| CA-08.1 Candado de repositorio | RF-17 | `test_el_bot_no_corre_en_copias_del_repositorio`, `test_el_bot_si_corre_en_el_repositorio_original`, `test_workflow_con_candado_al_repositorio_original` | ✅ |
+| CA-08.2 Candado de dominio | RF-17 | `panel_e2e: copia_no_autorizada` | ✅ |
+| CA-08.3 Licencia | RF-17 | `test_hay_licencia_con_todos_los_derechos_reservados` | ✅ |
 
 ## 3. Pendiente de verificación manual
 

@@ -173,6 +173,15 @@ textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospa
 .cal .otro-mes{opacity:.35}
 .cal .evento{display:block;width:100%;background:var(--azul);color:#fff;font-size:10px;padding:1px 3px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cal button[aria-pressed="true"] .num{font-weight:700}
+.cal button.tarde{box-shadow:inset 0 -4px 0 var(--amarillo)}
+.cal button.cancel{box-shadow:inset 0 -4px 0 var(--rojo)}
+.leyenda{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--suave);margin-top:6px}
+.leyenda span::before{content:"";display:inline-block;width:12px;height:4px;margin-right:5px;vertical-align:middle;background:var(--borde)}
+.leyenda .l-tarde::before{background:var(--amarillo)}.leyenda .l-cancel::before{background:var(--rojo)}
+.sala-opcion[disabled]{cursor:not-allowed;opacity:.55;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.04) 6px 7px)}
+.sala-opcion .bloq{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;text-align:left}
+.sala-opcion .nodisp{color:var(--t-mal);font-weight:600;font-size:11px}
+.plazos{margin:0;padding-left:18px}.plazos li{margin-bottom:6px}
 
 /* listas de corridas y tickets */
 .items{list-style:none;margin:0;padding:0}
@@ -232,7 +241,7 @@ textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospa
 <main class="derecha">
   <section class="encabezado"><h1 id="titulo">Reserva de Salas <small>Panel de Control</small></h1><ol class="migas" id="migas"><li>Inicio</li></ol></section>
   <section class="contenido" id="contenido"></section>
-  <p class="pie-pagina">Proyecto estudiantil de reserva automática. No es un sistema oficial de la UPB.</p>
+  <p class="pie-pagina">© 2026 Hugo Rafael Zúñiga Daza. Todos los derechos reservados (<a href="https://github.com/hugozuniga770/Reserva-De-Salas/blob/main/LICENSE" target="_blank" rel="noopener">licencia</a>). Proyecto estudiantil: no es un sistema oficial de la UPB.</p>
 </main>
 <div class="avisos" id="avisos" aria-live="polite"></div>
 
@@ -307,6 +316,31 @@ const sumarDias = (iso, n) => { const d = new Date(iso + "T00:00:00Z"); d.setUTC
 const minutosBO = () => { const a = boAhora(); return a.getUTCHours() * 60 + a.getUTCMinutes(); };
 // El sistema de la UPB pasa al día siguiente a las 20:00 BO.
 const fechaServidor = () => { const a = boAhora(); return minutosBO() >= 20 * 60 ? sumarDias(isoDe(a), 1) : isoDe(a); };
+/* Configuración pública del servicio (docs/servicio.json): sala/horario bloqueados y plazos. Sin nombres. */
+let SERVICIO = {bloqueo: {sala: "8", horario: "12:15-14:15"}, inicio: "15:30", plazo: "18:30", apertura: "20:00", fin: "21:15"};
+let _servicioCargado = false;
+async function cargarServicio() {
+  if (_servicioCargado) return;
+  try {
+    const r = await fetch("servicio.json?t=" + Date.now(), {cache: "no-store"});
+    if (r.ok) { const d = await r.json(); SERVICIO = {...SERVICIO, ...d, bloqueo: {...SERVICIO.bloqueo, ...(d.bloqueo || {})}}; }
+  } catch {}
+  _servicioCargado = true;
+}
+const aMin = (hhmm) => { const [hh, mm] = String(hhmm).split(":").map(Number); return hh * 60 + (mm || 0); };
+// Próximo día que abre en el sistema de la UPB (a las 20:00 del día anterior).
+const proximoDia = () => sumarDias(isoDe(boAhora()), minutosBO() < aMin(SERVICIO.apertura) ? 1 : 2);
+function situacionDia(iso) {
+  if (iso === fechaServidor()) return {clase: "cancel", texto: "ya abierto: solo cancelaciones, sin garantía"};
+  const m = minutosBO();
+  if (iso === proximoDia() && m >= aMin(SERVICIO.plazo) && m < aMin(SERVICIO.apertura)) return {clase: "tarde", texto: "pasó el plazo: sin garantía"};
+  return {clase: "ok", texto: ""};
+}
+const bloqueada = (salaId, horario) => !!SERVICIO.bloqueo && SERVICIO.bloqueo.sala === String(salaId) && SERVICIO.bloqueo.horario === horario;
+function llegoTarde(creadoIso, fecha) {
+  if (!creadoIso || !fecha) return false;
+  return new Date(creadoIso) > new Date(`${sumarDias(fecha, -1)}T${String(SERVICIO.plazo).padStart(5, "0")}:00-04:00`);
+}
 const fechaLarga = (iso) => { const d = new Date(iso + "T00:00:00Z"); return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]}`; };
 const horaBO = (isoUtc) => { if (!isoUtc) return ""; const d = new Date(new Date(isoUtc).getTime() - 4 * 3600e3); return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`; };
 const duracion = (min) => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} min`;
@@ -430,7 +464,7 @@ function caja({tipo = "", titulo, icono, der, cuerpo, pie}) {
 const boton = (txt, clase, onclick, ic, extra = {}) => h("button", {class: `btn ${clase}`, type: "button", onclick, ...extra}, ic ? svg(ic) : null, txt);
 
 /* Calendario mensual estilo UPBnet (fullcalendar): selecciona uno o varios días. */
-function calendario({seleccion, alCambiar, min, max, horario}) {
+function calendario({seleccion, alCambiar, min, max, horario, situacion = () => ({clase: "ok", texto: ""})}) {
   const raiz = h("div");
   let mes = (seleccion.size ? [...seleccion].sort()[0] : min).slice(0, 7);
   function dibujar() {
@@ -449,9 +483,11 @@ function calendario({seleccion, alCambiar, min, max, horario}) {
         const domingo = d.getUTCDay() === 0;
         const fuera = iso < min || iso > max || domingo;
         const sel = seleccion.has(iso);
+        const sit = fuera ? {clase: "", texto: ""} : situacion(iso);
         const b = h("button", {type: "button", disabled: fuera, "aria-pressed": sel ? "true" : "false",
-          "aria-label": `${fechaLarga(iso)}${domingo ? " (domingo: sin reservas)" : ""}`,
-          class: [iso === hoy ? "hoy" : "", iso.slice(0, 7) !== mes ? "otro-mes" : ""].join(" "),
+          "aria-label": `${fechaLarga(iso)}${domingo ? " (domingo: sin reservas)" : ""}${sit.texto ? ` (${sit.texto})` : ""}`,
+          title: sit.texto || null,
+          class: [iso === hoy ? "hoy" : "", iso.slice(0, 7) !== mes ? "otro-mes" : "", sit.clase === "ok" ? "" : sit.clase].join(" ").trim(),
           onclick: () => { sel ? seleccion.delete(iso) : seleccion.add(iso); alCambiar(); dibujar(); }},
           h("span", {class: "num"}, d.getUTCDate()),
           sel ? h("span", {class: "evento"}, horario().split("-")[0]) : null);
@@ -467,7 +503,8 @@ function calendario({seleccion, alCambiar, min, max, horario}) {
         boton("hoy", "btn-default btn-sm", () => { mes = min.slice(0, 7); dibujar(); }),
         h("h4", null, `${MESES[m - 1]} ${a}`),
         boton("›", "btn-default btn-sm", () => mover(1), null, {"aria-label": "Mes siguiente"})),
-      tabla);
+      tabla,
+      h("div", {class: "leyenda"}, h("span", null, "a tiempo"), h("span", {class: "l-tarde"}, "pasó el plazo (sin garantía)"), h("span", {class: "l-cancel"}, "ya abierto (solo cancelaciones)")));
   }
   dibujar();
   return raiz;
@@ -488,11 +525,16 @@ function formularioTicket({admin = false, alPreparar}) {
   const motivo = campo("t-motivo", "Detalle de la actividad", {maxlength: 120, value: "Estudio académico"});
 
   const chipsHorario = h("div", {class: "chips", role: "group", "aria-label": "Horario"});
-  const pintarHorarios = () => chipsHorario.replaceChildren(...HORARIOS.map((x) => h("button", {type: "button", class: "chip", "aria-pressed": x === horario ? "true" : "false", onclick: () => { horario = x; pintarHorarios(); cal.replaceWith(cal = nuevoCal()); }}, fmtH(x))));
+  const pintarHorarios = () => chipsHorario.replaceChildren(...HORARIOS.map((x) => h("button", {type: "button", class: "chip", "aria-pressed": x === horario ? "true" : "false", onclick: () => { horario = x; const i = salasElegidas.findIndex((id) => bloqueada(id, horario)); if (i >= 0) salasElegidas.splice(i, 1); pintarHorarios(); pintarSalas(); cal.replaceWith(cal = nuevoCal()); }}, fmtH(x))));
   pintarHorarios();
 
   const salasCaja = h("div", {class: "salas-grid"});
+  const notaBloqueo = h("div", {class: "ayuda"});
   const pintarSalas = () => salasCaja.replaceChildren(...SALAS.map((s) => {
+    const nb = sala(SERVICIO.bloqueo.sala);
+    notaBloqueo.textContent = nb && SERVICIO.bloqueo.horario === horario ? `La ${nb.n} no está disponible de ${fmtH(horario)} (reservada por el servicio).` : "";
+    if (bloqueada(s.id, horario)) return h("button", {type: "button", class: "sala-opcion", disabled: true, "aria-label": `${s.n}: no disponible en este horario`},
+      tecla(s.id), h("span", {class: "bloq"}, s.n.replace("Sala de estudio ", "Sala "), h("small", {class: "nodisp"}, "No disponible a esta hora")));
     const pos = salasElegidas.indexOf(s.id);
     return h("button", {type: "button", class: "sala-opcion", "aria-pressed": pos >= 0 ? "true" : "false",
       onclick: () => { pos >= 0 ? salasElegidas.splice(pos, 1) : salasElegidas.push(s.id); pintarSalas(); }},
@@ -504,12 +546,15 @@ function formularioTicket({admin = false, alPreparar}) {
   const min = fechaServidor();
   const max = sumarDias(isoDe(boAhora()), 90);
   const resumenFechas = h("div", {class: "ayuda"});
+  const riesgo = h("label", {class: "check grupo oculto", style: "margin-top:8px"}, h("input", {type: "checkbox", id: "t-riesgo"}),
+    h("span", null, "Entiendo que para los días marcados en ámbar o rojo la reserva no está garantizada."));
   const actualizarResumen = () => {
     const l = [...fechas].sort();
-    resumenFechas.textContent = l.length ? `${l.length} día(s): ${l.map(fechaLarga).join(", ")}` : "Toca uno o varios días. Cada día es una solicitud aparte.";
+    resumenFechas.textContent = l.length ? `${l.length} día(s): ${l.map((x) => { const t = situacionDia(x).texto; return fechaLarga(x) + (t ? ` (${t})` : ""); }).join(", ")}` : "Toca uno o varios días. Cada día es una solicitud aparte.";
+    riesgo.classList.toggle("oculto", !l.some((x) => situacionDia(x).clase !== "ok"));
     btn.textContent = l.length > 1 ? `Preparar ${l.length} solicitudes` : "Preparar solicitud";
   };
-  const nuevoCal = () => calendario({seleccion: fechas, alCambiar: actualizarResumen, min, max, horario: () => horario});
+  const nuevoCal = () => calendario({seleccion: fechas, alCambiar: actualizarResumen, min, max, horario: () => horario, situacion: situacionDia});
   let cal = nuevoCal();
   errores.fechas = h("div", {class: "error-campo", role: "alert"});
 
@@ -532,6 +577,9 @@ function formularioTicket({admin = false, alPreparar}) {
     if (!/^\d{3,10}$/.test(datos.codigo)) { errores["t-codigo"].textContent = "El código lleva solo números."; ok = false; }
     if (!salasElegidas.length) { errores.salas.textContent = "Elige al menos una sala."; ok = false; }
     if (!fechas.size) { errores.fechas.textContent = "Elige al menos un día en el calendario."; ok = false; }
+    const salasValidas = salasElegidas.filter((id) => !bloqueada(id, horario));
+    if (!salasValidas.length && salasElegidas.length) { errores.salas.textContent = "Esa sala no está disponible en este horario. Elige otra."; ok = false; }
+    if (!riesgo.classList.contains("oculto") && !$("#t-riesgo").checked) { errores.fechas.textContent = "Marca que entiendes que esos días no tienen garantía, o quítalos."; ok = false; }
     if (consentimiento && !$("#t-ok").checked) { errores.ok.textContent = "Necesitamos tu autorización para reservar a tu nombre."; ok = false; }
     if (!ok) { aviso("Revisa los campos marcados.", "av"); return; }
     btn.disabled = true;
@@ -541,7 +589,7 @@ function formularioTicket({admin = false, alPreparar}) {
       const tickets = [];
       for (const fecha of [...fechas].sort()) {
         const ref = nuevaRef();
-        const token = await UPBCifrado.cifrar({v: 1, ...datos, horario, salas: [...salasElegidas], fecha, ntfy: ntfy ? v("t-ntfy") : ""}, pub);
+        const token = await UPBCifrado.cifrar({v: 1, ...datos, horario, salas: salasElegidas.filter((id) => !bloqueada(id, horario)), fecha, ntfy: ntfy ? v("t-ntfy") : ""}, pub);
         tickets.push({ref, fecha, horario, titulo: `Solicitud de reserva · ${fecha} · ${horario} · ref ${ref}`,
           cuerpo: `${MARCADOR}\nSolicitud cifrada para el bot de reservas. Solo el bot puede leerla y la borra después de usarla.\n\n${token}\n`, token});
       }
@@ -556,8 +604,8 @@ function formularioTicket({admin = false, alPreparar}) {
   return h("div", null,
     h("div", {class: "dos-col"}, nombre, apellido), codigo, motivo,
     h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Horario"), chipsHorario),
-    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), h("div", {class: "ayuda", style: "margin:0 0 6px"}, "Toca en el orden que prefieras: 1ª, 2ª, 3ª…"), salasCaja, errores.salas),
-    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "¿Qué día(s) quieres la sala?"), cal, resumenFechas, errores.fechas),
+    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), h("div", {class: "ayuda", style: "margin:0 0 6px"}, "Toca en el orden que prefieras: 1ª, 2ª, 3ª…"), salasCaja, notaBloqueo, errores.salas),
+    h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "¿Qué día(s) quieres la sala?"), cal, resumenFechas, riesgo, errores.fechas),
     ntfy, consentimiento, errores.ok, btn);
 }
 
@@ -572,8 +620,10 @@ async function clavePublica() {
 async function vistaPedir(c) {
   encabezado("Pedir sala", "Estudiante Pregrado", ["Inicio", "Pedir sala"]);
   const pub = await clavePublica();
-  c.append(h("div", {class: "alerta alerta-info"}, svg("candado"), h("div", null,
-    h("b", null, "Así funciona. "), "El bot intenta reservar a tu nombre cuando el sistema abre (20:00 del día anterior). Tus datos se cifran en este teléfono: en GitHub nadie más puede leerlos y el bot los borra apenas los usa.")));
+  const zonaPlazo = h("div");
+  zonaPlazo.append(avisoPlazo());
+  c.append(zonaPlazo);
+  temporizador(() => zonaPlazo.replaceChildren(avisoPlazo()), 60000);
   if (!pub) {
     c.append(h("div", {class: "callout warning"}, h("h4", null, "Las solicitudes todavía no están activas"), h("p", null, "El administrador aún no creó la llave de cifrado. Vuelve a intentarlo más tarde.")));
     return;
@@ -581,11 +631,33 @@ async function vistaPedir(c) {
   const resultado = h("div");
   c.append(h("div", {class: "fila dos"},
     caja({tipo: "primary", titulo: "Nueva solicitud", icono: "cal", cuerpo: formularioTicket({alPreparar: (t) => mostrarParaEnviar(resultado, t)})}),
-    h("div", null, resultado, caja({tipo: "info", titulo: "Antes de pedir", icono: "info", cuerpo: h("ul", {style: "margin:0;padding-left:18px"},
+    h("div", null, resultado, cajaPlazos(), caja({tipo: "info", titulo: "Antes de pedir", icono: "info", cuerpo: h("ul", {style: "margin:0;padding-left:18px"},
       h("li", null, "Puedes pedir con semanas de anticipación: el bot lo intenta la noche anterior a cada día."),
+      h("li", null, "Tus datos se cifran en este teléfono: en GitHub nadie más puede leerlos y el bot los borra apenas los usa."),
       h("li", null, "Solo salas de estudio. Si tu primera opción ya está tomada, prueba la siguiente."),
       h("li", null, "Necesitas una cuenta de GitHub para enviar (es gratis). Si no tienes, copia el texto y mándaselo al administrador por WhatsApp."),
       h("li", null, "Sigue tu solicitud en «Estado» con el código de referencia."))}))));
+}
+function avisoPlazo() {
+  const m = minutosBO(), d = proximoDia(), plazo = SERVICIO.plazo;
+  if (m < aMin(plazo)) return h("div", {class: "alerta alerta-ok"}, svg("reloj"), h("div", null,
+    h("b", null, `Para el ${fechaLarga(d)} puedes pedir hasta hoy a las ${plazo}. `), `Te quedan ${duracion(aMin(plazo) - m)}.`));
+  if (m < aMin(SERVICIO.apertura)) return h("div", {class: "alerta alerta-av"}, svg("alerta"), h("div", null,
+    h("b", null, `Ya pasó el plazo para el ${fechaLarga(d)} (${plazo}). `),
+    `Si pides igual, se intenta sin garantía. Para el ${fechaLarga(sumarDias(d, 1))} tienes hasta mañana a las ${plazo}.`));
+  return h("div", {class: "alerta alerta-av"}, svg("alerta"), h("div", null,
+    h("b", null, `Las reservas del ${fechaLarga(fechaServidor())} ya abrieron a las ${SERVICIO.apertura}. `),
+    `Para ese día no se asegura la reserva: solo se buscan cancelaciones. Para el ${fechaLarga(d)} tienes hasta mañana a las ${plazo}.`));
+}
+function cajaPlazos() {
+  const b = SERVICIO.bloqueo, s = b && sala(b.sala);
+  return caja({tipo: "warning", titulo: "Cuándo pedir", icono: "reloj", cuerpo: h("ul", {class: "plazos"},
+    h("li", null, h("b", null, `${SERVICIO.apertura} del día anterior: `), "el sistema de la UPB abre las reservas de cada día."),
+    h("li", null, h("b", null, `Desde las ${SERVICIO.inicio}: `), "el bot se activa y lanza todas las solicitudes junto con la corrida principal."),
+    h("li", null, h("b", null, `Plazo: hasta las ${SERVICIO.plazo} del día anterior. `), "Así tu solicitud entra segura en la corrida de la apertura."),
+    h("li", null, h("b", null, `Después de las ${SERVICIO.plazo}: `), "se intenta, pero sin garantía."),
+    h("li", null, h("b", null, `Después de las ${SERVICIO.apertura}: `), "ese día ya abrió. No se asegura la reserva del día siguiente: solo se buscan cancelaciones."),
+    s ? h("li", null, h("b", null, `${s.n} de ${fmtH(b.horario)}: `), "no disponible (reservada por el servicio).") : null)});
 }
 function mostrarParaEnviar(destino, tickets) {
   const mias = guardado.json("mis_tickets", []);
@@ -656,7 +728,7 @@ async function vistaEstado(c) {
       cuadro({color: "aqua", titulo: cr.titulo, texto: cr.texto, icono: "reloj"}),
       cuadro({color: bot.color, titulo: bot.titulo, texto: `Bot principal: ${bot.texto}`, icono: "play"}),
       cuadro({color: "morado", titulo: String(tickets), texto: "Solicitudes corriendo ahora", icono: "usuarios"}),
-      cuadro({color: "amarillo", titulo: "20:00", texto: "El sistema abre el día siguiente", icono: "cal"})));
+      cuadro({color: "amarillo", titulo: SERVICIO.plazo, texto: minutosBO() < aMin(SERVICIO.plazo) ? `Plazo para pedir el ${fechaLarga(proximoDia())}` : `Plazo vencido para el ${fechaLarga(proximoDia())}: sin garantía`, icono: "cal"})));
     const mias = guardado.json("mis_tickets", []);
     if (!mias.length) { lista.replaceChildren(h("div", {class: "vacio"}, "Todavía no tienes solicitudes en este teléfono. ", h("a", {href: "#pedir"}, "Pide una sala"), ".")); return; }
     lista.replaceChildren(...mias.slice().reverse().map((m) => {
@@ -665,7 +737,8 @@ async function vistaEstado(c) {
       const [txt, col] = is ? estadoTicket(is, runs) : ["Aún no llega a GitHub", "gris"];
       const detalle = h("div", {class: "meta"});
       return h("div", {class: "ticket"},
-        h("div", {class: "ticket-cab"}, h("b", null, fecha ? fechaLarga(fecha) : "Solicitud"), h("span", {class: `etq ${col}`}, txt)),
+        h("div", {class: "ticket-cab"}, h("b", null, fecha ? fechaLarga(fecha) : "Solicitud"), h("span", {class: `etq ${col}`}, txt),
+          is && llegoTarde(is.created_at, fecha) ? h("span", {class: "etq gris"}, "Pedida después del plazo") : null),
         h("div", {class: "meta"}, `${hor ? fmtH(hor) + " · " : ""}ref ${m.ref}${is ? ` · #${is.number}` : ""}`),
         detalle,
         h("div", {class: "acciones"},
@@ -790,7 +863,8 @@ async function filaTicket(t, runs, privada, recargar) {
     await despachar(inputs); await ponerEtiquetas(t.number, ["en-curso"]);
   };
   return h("div", {class: "ticket"},
-    h("div", {class: "ticket-cab"}, h("b", null, datos ? `${datos.nombre} ${datos.apellido}` : `Solicitud #${t.number}`), h("span", {class: `etq ${col}`}, txt)),
+    h("div", {class: "ticket-cab"}, h("b", null, datos ? `${datos.nombre} ${datos.apellido}` : `Solicitud #${t.number}`), h("span", {class: `etq ${col}`}, txt),
+      llegoTarde(t.created_at, fecha) ? h("span", {class: "etq gris"}, "Pedida después del plazo") : null),
     h("div", {class: "meta"}, `${fecha ? fechaLarga(fecha) : "sin fecha"} · ${hor ? fmtH(hor) : ""}${datos ? ` · código •••${datos.codigo.slice(-3)}` : ""} · #${t.number} · enviado por @${t.user.login}`),
     datos ? h("div", {style: "display:flex;gap:4px;align-items:center"}, datos.salas.map(tecla), datos.proposito ? h("span", {class: "ayuda", style: "margin-left:6px"}, datos.proposito) : null) : null,
     error ? h("div", {class: "error-campo"}, error) : null,
@@ -827,6 +901,14 @@ async function guardarVariable(nombre, valor, actuales) {
   if (nombre in actuales) await api(`/actions/variables/${nombre}`, {metodo: "PATCH", cuerpo: {name: nombre, value: valor}});
   else await api(`/actions/variables`, {metodo: "POST", cuerpo: {name: nombre, value: valor}});
 }
+async function publicarServicio(cambios) {
+  const nuevo = {...SERVICIO, ...cambios, bloqueo: {...SERVICIO.bloqueo, ...(cambios.bloqueo || {})}};
+  const json = JSON.stringify(nuevo, null, 2) + "\n";
+  if (JSON.stringify(nuevo) === JSON.stringify(SERVICIO)) return;
+  let sha; try { sha = (await api("/contents/docs/servicio.json")).sha; } catch (x) { if (x.estado !== 404) throw x; }
+  await api("/contents/docs/servicio.json", {metodo: "PUT", cuerpo: {message: "Actualiza plazos y bloqueo públicos del servicio", content: btoa(unescape(encodeURIComponent(json))), sha}});
+  SERVICIO = nuevo;
+}
 async function vistaAjustes(c) {
   encabezado("Ajustes", "Tu reserva y el bot", ["Inicio", "Ajustes"]);
   let vars;
@@ -856,7 +938,7 @@ async function vistaAjustes(c) {
         h("div", {class: "ayuda", style: "margin:-8px 0 12px"}, "Vacío = usa los de tus Secrets."),
         h("div", {class: "grupo"}, h("label", {for: "a-motivo"}, "Detalle de la actividad"), inp("a-motivo", vars.UPB_PROPOSITO, {placeholder: "Estudio académico", maxlength: 120})),
         h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Horario"), chips),
-        h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), ol, h("div", {class: "ayuda"}, "La primera es tu favorita: los tickets de otros no la tocan en los primeros 20 s de la apertura.")),
+        h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), ol, h("div", {class: "ayuda"}, "La primera, en tu horario, queda bloqueada para las solicitudes de otros (se muestra como «reservada por el servicio»).")),
         h("p", {class: "ayuda"}, "Tu código de estudiante está en los Secrets de GitHub. ", h("a", {href: `https://github.com/${repo()}/settings/secrets/actions`, target: "_blank", rel: "noopener"}, "Cambiar código")))})),
     h("div", null,
       caja({tipo: "warning", titulo: "Solicitudes de otros", icono: "usuarios", cuerpo: h("div", null,
@@ -874,6 +956,8 @@ async function vistaAjustes(c) {
           UPB_HORARIO: horario, UPB_SALAS: salasVal, UPB_AUTO_APROBAR: auto.checked ? "1" : "0", UPB_AUTO_APROBAR_BO: hora, UPB_MAX_PERSONAS: max, UPB_PAUSADO: pausa.checked ? "1" : "0"};
         for (const [k, v] of Object.entries(cambios)) await guardarVariable(k, v, vars);
         vars = await leerVariables();
+        try { await publicarServicio({bloqueo: {sala: salasVal.split(",")[0], horario}, plazo: hora}); }
+        catch (x) { aviso("Ajustes guardados, pero no pude publicar los plazos y el bloqueo en la página pública: " + x.message, "av", 9000); }
         if (cambios.UPB_NOMBRE) guardado.set("nombre_mostrar", `${cambios.UPB_NOMBRE} ${cambios.UPB_APELLIDO}`.trim());
         dibujarMarco("ajustes");
         aviso("Cambios guardados. Se usan desde la próxima corrida.", "ok");
@@ -974,8 +1058,22 @@ let _timer = null;
 function temporizador(fn, ms) { clearInterval(_timer); _timer = setInterval(() => { if (document.visibilityState === "visible") fn(); }, ms); }
 const VISTAS = {pedir: vistaPedir, estado: vistaEstado, inicio: vistaInicio, tickets: vistaTickets, ajustes: vistaAjustes, guia: vistaGuia, conectar: vistaConectar};
 const SOLO_ADMIN = new Set(["inicio", "tickets", "ajustes", "guia"]);
+// Candado: el panel solo funciona en su dirección oficial (ver LICENSE). localhost y 127.0.0.1: pruebas.
+const DOMINIOS_AUTORIZADOS = ["hugozuniga770.github.io", "localhost", "127.0.0.1"];
+const OFICIAL = "https://hugozuniga770.github.io/Reserva-De-Salas/";
+function copiaNoAutorizada() {
+  $("#menu").replaceChildren(); $("#usuario-barra").replaceChildren();
+  encabezado("Copia no autorizada", "servicio protegido", ["Inicio"]);
+  $("#contenido").replaceChildren(h("div", {class: "callout danger"},
+    h("h4", null, "Esta es una copia no autorizada"),
+    h("p", null, "Este servicio solo funciona en su dirección oficial. Su código está protegido: todos los derechos reservados."),
+    h("p", null, h("a", {href: OFICIAL}, "Ir al servicio oficial")),
+    h("p", null, h("a", {href: "https://github.com/hugozuniga770/Reserva-De-Salas/blob/main/LICENSE"}, "Ver la licencia"))));
+}
 async function ir() {
   clearInterval(_timer);
+  if (!DOMINIOS_AUTORIZADOS.includes(location.hostname)) return copiaNoAutorizada();
+  await cargarServicio();
   let v = location.hash.slice(1) || (esAdmin() ? "inicio" : "pedir");
   if (!VISTAS[v]) v = esAdmin() ? "inicio" : "pedir";
   if (SOLO_ADMIN.has(v) && !esAdmin()) v = "conectar";

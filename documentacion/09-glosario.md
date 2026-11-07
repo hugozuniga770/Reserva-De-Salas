@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Glosario y convenciones |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 
 > Redactado con asistencia de Claude (Anthropic).
@@ -33,8 +33,11 @@
 | Fin por reloj | La corrida termina a una hora fija (21:15 BO), sin importar cuándo arrancó |
 | Latido | Aviso 🟢 de que el bot está vivo antes de la apertura |
 | Llave pública / privada | Par RSA. La pública cifra las solicitudes y la privada (Secret y panel) las lee |
+| Candado | Comprobación que hace que el bot y el panel solo funcionen en el repositorio y la dirección originales |
 | Núcleo | Ventana de 19:45 a 20:15 BO, con el ritmo máximo |
+| Plazo | Hora límite del día anterior (18:30 por defecto) para que una solicitud entre segura en la corrida de la apertura |
 | Referencia | Código de 6 caracteres en el título del ticket. Permite ver el estado sin datos personales |
 | Responsable / dueño | Hugo Rafael Zúñiga Daza, cuya reserva siempre corre |
+| Sala del servicio | Tu primera sala en tu horario (por defecto F, 12:15–14:15). No está disponible para solicitudes |
 | Ticket / solicitud | Issue de GitHub con los datos cifrados de un pedido de sala para un día |
 | Verificación | Volver a leer el calendario del servidor y encontrar el nombre de la persona en ese horario |

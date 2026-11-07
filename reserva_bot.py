@@ -49,6 +49,8 @@ Códigos de salida:
   1  configuración inválida
   2  el servidor rechazó la reserva varias veces seguidas (revisar a mano)
   3  no se pudo leer la página en toda la ejecución
+  4  arrancó después de la hora de fin sin tener sala
+  5  copia no autorizada: el repositorio no es el original (ver LICENSE)
 """
 from __future__ import annotations
 
@@ -70,11 +72,12 @@ VERSION = "2.0"
 URL_DEFECTO = "https://atari.scz.upb.edu/student_reservation.php"
 BO_TZ = timezone(timedelta(hours=-4), "BOT")  # Bolivia: UTC-4 todo el año, sin horario de verano
 
-EXIT_OK, EXIT_CONFIG, EXIT_RECHAZOS, EXIT_SITIO, EXIT_TARDE = 0, 1, 2, 3, 4
+EXIT_OK, EXIT_CONFIG, EXIT_RECHAZOS, EXIT_SITIO, EXIT_TARDE, EXIT_COPIA = 0, 1, 2, 3, 4, 5
+# Este servicio solo funciona en su repositorio original (ver LICENSE).
+REPO_AUTORIZADO = "hugozuniga770/Reserva-De-Salas"
 MARCADOR_TICKET = "<!-- reserva-upb:v1 -->"
 # Corridas de tickets: más suaves que la tuya, para no multiplicar la carga y que tú llegues primero.
 RITMO_TICKET = {"intervalo": 4.0, "intervalo_medio": 2.0, "intervalo_rafaga": 1.0}
-PRIORIDAD_DUENIO_SEG = 20  # los tickets no tocan tu sala favorita en los primeros 20 s tras la apertura
 
 
 # ───────────────────────────── utilidades ──────────────────────────────
@@ -568,6 +571,15 @@ class Bot:
         if datos["codigo"] == self.cfg.codigo:
             self.descartar_ticket(n, "usa el mismo código que la reserva principal")
             return None
+        # La sala y el horario del servicio no están disponibles para solicitudes (sin nombrar a nadie).
+        if self.sala_duenio and datos["horario"] == self.cfg.horario and self.sala_duenio in datos["salas"]:
+            datos["salas"] = [x for x in datos["salas"] if x != self.sala_duenio]
+            nombre_sala = p.salas.get(self.sala_duenio, "esa sala")
+            if not datos["salas"]:
+                self.descartar_ticket(n, f"la {nombre_sala} de {datos['horario']} no está disponible "
+                                         "(reservada por el servicio). Elige otra sala u otro horario")
+                return None
+            log(f"Ticket #{n}: se quitó la {nombre_sala} de {datos['horario']} (reservada por el servicio).")
         for v in (f"{datos['nombre']} {datos['apellido']}", datos["nombre"], datos["apellido"],
                   datos["codigo"], datos["ntfy"]):
             if v and len(v) >= 4:
@@ -612,11 +624,17 @@ class Bot:
                 self.registrar_hecha(per, ev, p)
             return "hecha", p
         if self.horario_ya_paso(p.hoy, ahora, per.horario):
+            if not per.es_duenio:
+                # Su horario ya pasó y no se consiguió: se cierra YA (si no, se relanzaría cada 5 min).
+                texto = (f"❌ No se consiguió sala para {per.fecha}. La solicitud se atendió después de la "
+                         "apertura (20:00 del día anterior): solo se pudieron buscar cancelaciones. "
+                         "Pide antes del plazo para tener garantía.")
+                self.resumen.append(f"{per.etiqueta}: sin sala ❌ (llegó tarde)")
+                self.notificar(texto, topic=per.ntfy)
+                self.cerrar_ticket(per, "sin-sala", texto)
+                return "fuera", p
             return "espera", p
         libres = [s for s in per.salas if sala_libre(p, s, per.horario)]
-        if not per.es_duenio and self.sala_duenio and self.hora_cambio_dia and \
-                (cfg.reloj() - self.hora_cambio_dia).total_seconds() < PRIORIDAD_DUENIO_SEG:
-            libres = [s for s in libres if s != self.sala_duenio]  # tu sala favorita es primero tuya
         if not libres:
             return "vigila", p
         intento = self.intentar(p, libres[0], per)
@@ -809,8 +827,12 @@ class Bot:
                     # Solo si tuvo su oportunidad (vigiló la apertura) o su horario ya pasó.
                     # Si se lanzó tarde (p. ej. aprobado a las 22:54), queda abierto y se relanza.
                     self.resumen.append(f"{per.etiqueta}: sin sala ❌")
-                    self.notificar(f"❌ No se consiguió sala para {per.fecha}.", topic=per.ntfy)
-                    self.cerrar_solicitud(per, "sin-sala", f"❌ No se consiguió sala para {per.fecha}.")
+                    texto = f"❌ No se consiguió sala para {per.fecha}."
+                    if not latido_hecho:
+                        texto += (" La solicitud se atendió después de la apertura (20:00 del día anterior): "
+                                  "solo se pudieron buscar cancelaciones. Pide antes del plazo para tener garantía.")
+                    self.notificar(texto, topic=per.ntfy)
+                    self.cerrar_solicitud(per, "sin-sala", texto)
         if self.ticket:
             return self.terminar(EXIT_OK, f"Ticket #{self.ticket}: " + (
                 "reserva confirmada ✅" if duenio.reservada_aqui else "terminado sin sala."))
@@ -840,7 +862,16 @@ def fuente_desde_entorno():  # noqa: C901
         return None, None
 
 
+def repositorio_autorizado(repo: str | None) -> bool:
+    """En GitHub Actions, GITHUB_REPOSITORY dice dónde corre. Fuera de Actions (pruebas locales) no aplica."""
+    return not repo or repo.strip().lower() == REPO_AUTORIZADO.lower()
+
+
 def main() -> int:
+    if not repositorio_autorizado(os.getenv("GITHUB_REPOSITORY")):
+        print(f"::error::Copia no autorizada: este servicio solo funciona en {REPO_AUTORIZADO}. "
+              "Ver LICENSE (todos los derechos reservados).", flush=True)
+        return EXIT_COPIA
     try:
         cfg = Config.desde_entorno()
     except ValueError as e:

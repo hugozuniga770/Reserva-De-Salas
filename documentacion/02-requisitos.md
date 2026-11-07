@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Especificación de requisitos |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 | Revisado por | *(pendiente)* |
 | Estado | Borrador para revisión |
@@ -29,8 +29,10 @@
 | RF-11 | El responsable aprueba, rechaza o quita solicitudes. Las pendientes se aprueban solas a una hora configurable (18:30 BO por defecto) si el responsable no decide. | [ACUERDO] |
 | RF-12 | Cada solicitud se atiende en **su propia corrida aislada**: no existe una lista de usuarios, los datos son temporales y se borran tras usarse, y eliminar una solicitud no afecta a las demás. | [ACUERDO] |
 | RF-13 | Cualquier persona puede ver si el bot y su solicitud están corriendo, sin ver datos personales de nadie. | [ACUERDO] |
-| RF-14 | La sala favorita del responsable es suya durante los primeros 20 s de la apertura: los tickets no la intentan en ese lapso. | [PROPUESTA] |
+| RF-14 | La sala favorita del responsable en su horario (por defecto Sala F, 12:15–14:15) **no está disponible** para solicitudes. La página la muestra como «reservada por el servicio», sin nombrar a nadie, y el bot la quita de cualquier solicitud. Reemplaza a la regla de prioridad de 20 s (v4.1). | [ACUERDO] |
 | RF-15 | Tope de personas atendidas por noche (por defecto 4, incluido el responsable). | [PROPUESTA] |
+| RF-16 | Plazos explícitos para los solicitantes: el sistema abre a las 20:00 del día anterior; el bot se activa desde las 15:30 y lanza las solicitudes junto con la corrida principal; **plazo hasta las 18:30 del día anterior**; después se intenta sin garantía; después de las 20:00 no se asegura la reserva del día siguiente (solo cancelaciones). Cuenta regresiva, marcas en el calendario y confirmación explícita para días sin garantía. | [ACUERDO] |
+| RF-17 | Protección contra copias sin hacer privado el repositorio: licencia con todos los derechos reservados, y el bot y el panel solo funcionan en el repositorio y la dirección originales. | [ACUERDO] |
 
 ## 2. Requisitos no funcionales
 
@@ -59,7 +61,7 @@ Como responsable, quiero que el bot pruebe F, luego D, B y C, para quedarme siem
 
 - CA-02.1: Si F, D y B están ocupadas, reserva C.
 - CA-02.2: Nunca intenta una sala de lectura.
-- CA-02.3: Un ticket que solo quiere F no la toca en los primeros 20 s tras la apertura.
+- CA-02.3: Ninguna solicitud puede usar la sala del servicio en su horario: la página la bloquea y el bot la quita. Si era la única sala pedida, la solicitud se descarta explicando que no está disponible. La F en otro horario sí se puede pedir.
 
 **HU-03 — Que siempre esté corriendo** (RF-04, RF-05, RF-06)
 Como responsable, quiero que el bot esté vigilando a las 20:00 aunque GitHub lo retrase, y enterarme si no lo está.
@@ -89,5 +91,19 @@ Como responsable, quiero revisar las solicitudes. Si no llego a hacerlo, quiero 
 - CA-06.2: Una rechazada nunca se lanza. Una «en curso» no se lanza dos veces.
 - CA-06.3: Una solicitud con semanas de anticipación se lanza recién la tarde anterior (desde las 15:30 BO).
 - CA-06.4: Eliminar una solicitud no afecta a las demás corridas.
+
+**HU-07 — Saber hasta cuándo puedo pedir** (RF-16)
+Como estudiante, quiero saber claramente hasta qué hora puedo pedir para tener garantía.
+
+- CA-07.1: La página muestra el plazo y el tiempo que queda; pasado el plazo o la apertura, lo dice explícitamente.
+- CA-07.2: El calendario marca en ámbar los días cuyo plazo ya pasó y en rojo los que ya abrieron; para elegirlos hay que aceptar que no tienen garantía.
+- CA-07.3: Si una solicitud se atiende después de la apertura y no consigue sala, el cierre explica que llegó tarde.
+
+**HU-08 — Que no se apropien del servicio** (RF-17)
+Como responsable, quiero que nadie pueda copiar el servicio y hacerlo pasar por suyo, sin tener que hacer privado el repositorio.
+
+- CA-08.1: El bot termina con el código 5 si corre en otro repositorio, y el workflow no se ejecuta fuera del original.
+- CA-08.2: El panel publicado en otro dominio muestra «copia no autorizada» y no funciona.
+- CA-08.3: El repositorio incluye una licencia con todos los derechos reservados.
 
 La relación de cada criterio con su prueba automática está en [07 · Pruebas y trazabilidad](07-pruebas-y-trazabilidad.md).

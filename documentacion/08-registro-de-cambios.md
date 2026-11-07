@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Registro de cambios |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 | Estado | Vigente |
 
@@ -26,3 +26,7 @@
 | C-11 | 06/11/2026 | Un ticket lanzado después de las 21:15 ya no se cierra como «sin sala» tras una sola consulta: vigila 60 min y, si no consigue, queda abierto para relanzarse | Revisión del caso #1 (aprobado a las 22:54) | RF-12, `reserva_bot.py`, panel |
 | C-12 | 06/11/2026 | El panel muestra y detiene la corrida que está **corriendo**, no la que espera en cola en el mismo carril | Revisión de los 5 arranques escalonados | RF-07, panel |
 | C-13 | 06/11/2026 | Guardias nuevas: prueba que lee el YAML como GitHub, actionlint en el CI, pruebas del bot completo por HTTP con las variables de Actions y un GitHub simulado que rechaza entradas inválidas | Que un error como C-10 no vuelva a llegar a producción | RNF-06 |
+| C-14 | 07/11/2026 | Plazos explícitos en la página pública: recuadro «Cuándo pedir», cuenta regresiva, marcas ámbar y roja en el calendario y confirmación obligatoria para días sin garantía. El cierre de un ticket que llegó tarde lo explica | Pedido del responsable: que quede claro que hay que pedir con anticipación (plazo 18:30) y que después de las 20:00 no se asegura el día siguiente | RF-16, HU-07 |
+| C-15 | 07/11/2026 | La Sala F de 12:15–14:15 (tu sala y horario) no está disponible para solicitudes: bloqueada en la página («reservada por el servicio») y en el bot. Se elimina la regla de prioridad de 20 s | Pedido del responsable, sin exponer su nombre | RF-14, D-13 |
+| C-16 | 07/11/2026 | Corrección: un ticket cuyo horario ya pasó se cierra de inmediato. Antes su corrida terminaba sin cerrarlo y tu corrida lo relanzaba cada 5 minutos | Detectado por la prueba nueva de C-14 | RF-12 |
+| C-17 | 07/11/2026 | Protección contra copias: `LICENSE` con todos los derechos reservados, candado de repositorio en el workflow y el bot (código de salida 5) y candado de dominio en el panel | Pedido del responsable: que no se apropien del servicio sin hacerlo privado | RF-17, D-14 |

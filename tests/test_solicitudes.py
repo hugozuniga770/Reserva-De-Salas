@@ -189,16 +189,15 @@ def test_ticket_oculta_los_datos_en_los_logs_publicos(servidor, capsys):
     assert lineas[primera].startswith("::add-mask::")  # nada se imprime antes de ocultarlo
 
 
-def test_ticket_respeta_tu_sala_favorita_al_abrir(servidor):
+def test_en_plena_apertura_un_ticket_nunca_intenta_la_sala_del_servicio(servidor):
+    """Reemplaza a la antigua regla de 20 s: la F de 12:15 no se intenta nunca, ni en la apertura."""
     est, url = servidor("normal")
     est.hoy = date(2026, 10, 22)
     est.cambiar_dia_tras_gets = 2                        # la apertura ocurre durante la corrida
     f = FuenteFalsa()
-    f.agregar(6, solicitud(salas=("8",)), etiquetas={"aprobada"})
-    b = ticket(url, f, 6, max_segundos=0.6)
-    b.sala_duenio = "8"
-    b.ejecutar()
-    assert est.posts == []                               # en los primeros 20 s la F es tuya
+    f.agregar(6, solicitud(salas=("8", "6")), etiquetas={"aprobada"})
+    ticket(url, f, 6, max_segundos=0.6).ejecutar()
+    assert [x["room"] for x in est.posts] == ["6"]       # tomó la D apenas abrió; la F jamás
 
 
 def test_tickets_no_se_mezclan_entre_corridas(servidor):
@@ -330,9 +329,9 @@ def test_ticket_aprobado_de_noche_no_se_cierra_sin_vigilar(servidor):
     Su corrida no debe cerrarlo como 'sin sala' tras una sola consulta: lo deja abierto para que
     vuelva a lanzarse, con sus datos intactos."""
     est, url = servidor("normal")
-    est.reservar("Otra Persona", "8", "12:15-14:15")
+    est.reservar("Otra Persona", "6", "12:15-14:15")
     f = FuenteFalsa()
-    f.agregar(1, solicitud(salas=("8",)), etiquetas={"aprobada", "en-curso"})
+    f.agregar(1, solicitud(salas=("6",)), etiquetas={"aprobada", "en-curso"})
     noche = lambda: datetime(2026, 10, 22, 22, 54, tzinfo=rb.BO_TZ)  # servidor ya en el 23
     assert ticket(url, f, 1, reloj=noche).ejecutar() == 0
     assert f.issues[1].abierto and "sin-sala" not in f.issues[1].etiquetas
@@ -343,10 +342,10 @@ def test_ticket_lanzado_de_noche_con_minutos_vigila_cancelaciones(servidor):
     """Desde el panel, fuera de 15:00–21:15, el ticket se lanza con 'minutos': vigila y toma
     la sala si alguien la libera."""
     est, url = servidor("normal")
-    est.reservar("Otra Persona", "8", "12:15-14:15")
-    est.liberar_tras_gets = ("8", "12:15-14:15", 4)
+    est.reservar("Otra Persona", "6", "12:15-14:15")
+    est.liberar_tras_gets = ("6", "12:15-14:15", 4)
     f = FuenteFalsa()
-    f.agregar(1, solicitud(salas=("8",)), etiquetas={"aprobada", "en-curso"})
+    f.agregar(1, solicitud(salas=("6",)), etiquetas={"aprobada", "en-curso"})
     noche = lambda: datetime(2026, 10, 22, 22, 54, tzinfo=rb.BO_TZ)
     assert ticket(url, f, 1, reloj=noche, hasta_bo="", max_segundos=3).ejecutar() == 0
     assert [x["first_name"] for x in est.posts] == ["Ana María"]
@@ -438,7 +437,7 @@ def _entorno_actions(monkeypatch, url_upb, gh, **extra):
              "UPB_SALAS": "8,6,15,3", "UPB_HORARIO": "12:15-14:15", "UPB_DRY_RUN": "0", "UPB_URL": url_upb,
              "UPB_HASTA_BO": "", "UPB_MAX_MINUTOS": "0.1", "UPB_GH_TOKEN": "tok-prueba",
              "UPB_REPO": "hugo/Reserva-De-Salas", "UPB_CLAVE_PRIVADA": PRIV, "UPB_GH_API": gh.url,
-             "GITHUB_REF_NAME": "main", "NTFY_TOPIC": ""}
+             "GITHUB_REF_NAME": "main", "NTFY_TOPIC": "", "GITHUB_REPOSITORY": "hugozuniga770/Reserva-De-Salas"}
     vars_.update(extra)
     for k, v in vars_.items():
         monkeypatch.setenv(k, v)
@@ -481,3 +480,45 @@ def test_tu_corrida_lanza_tickets_por_http(servidor, monkeypatch):
     assert "en-curso" in {x["name"] for x in gh.issues[7]["labels"]} and "upbv1" in gh.issues[7]["body"]
     assert [x["first_name"] for x in est.posts] == ["Hugo Rafael"]
     gh.srv.shutdown()
+
+
+# ───────────────────────── sala y horario del servicio / plazos (v4.2) ─────────────────────────
+
+def test_nadie_puede_pedir_la_sala_del_servicio_en_su_horario(servidor):
+    """La Sala F de 12:15–14:15 es del servicio: si es lo único que pide, se descarta sin nombrar a nadie."""
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(3, solicitud(salas=("8",)), etiquetas={"aprobada"})
+    ticket(url, f, 3).ejecutar()
+    assert est.posts == [] and not f.issues[3].abierto
+    msg = f.comentarios[3][0]
+    assert "no está disponible" in msg and "servicio" in msg and "Hugo" not in msg
+
+
+def test_si_pide_f_y_otras_se_quita_la_f(servidor):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(4, solicitud(salas=("8", "6")), etiquetas={"aprobada"})
+    ticket(url, f, 4).ejecutar()
+    assert [x["room"] for x in est.posts] == ["6"]          # jamás intenta la F a las 12:15
+
+
+def test_la_f_en_otro_horario_si_se_puede(servidor):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(5, solicitud(salas=("8",), horario="10:00-12:00"), etiquetas={"aprobada"}, horario="10:00-12:00")
+    ticket(url, f, 5).ejecutar()
+    assert [(x["room"], x["schedule"]) for x in est.posts] == [("8", "10:00-12:00")]
+
+
+def test_sin_sala_por_llegar_tarde_lo_explica(servidor):
+    """Ticket lanzado después de la apertura cuyo horario ya pasó: el cierre dice que llegó tarde."""
+    est, url = servidor("normal")
+    est.hoy = date(2026, 10, 22)
+    est.reservar("Otra Persona", "6", "12:15-14:15")
+    f = FuenteFalsa()
+    f.agregar(6, solicitud(salas=("6",), fecha=date(2026, 10, 22)), etiquetas={"aprobada"}, fecha=date(2026, 10, 22))
+    tarde = lambda: datetime(2026, 10, 22, 15, 0, tzinfo=rb.BO_TZ)   # 12:15–14:15 de hoy ya pasó
+    ticket(url, f, 6, reloj=tarde).ejecutar()
+    assert not f.issues[6].abierto and "sin-sala" in f.issues[6].etiquetas
+    assert "después de la apertura" in f.comentarios[6][0]

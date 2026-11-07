@@ -57,8 +57,9 @@ permissions:
 
 jobs:
   reservar:
+    # Candado: solo corre en el repositorio original (ver LICENSE). En copias no hace nada.
     # "Pausar" desde el panel solo frena los automáticos; "Correr bot ahora" siempre funciona.
-    if: github.event_name != 'schedule' || vars.UPB_PAUSADO != '1'
+    if: github.repository == 'hugozuniga770/Reserva-De-Salas' && (github.event_name != 'schedule' || vars.UPB_PAUSADO != '1')
     runs-on: ubuntu-latest
     timeout-minutes: 355        # GitHub corta a los 360
     steps:

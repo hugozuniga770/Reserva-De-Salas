@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Arquitectura |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 | Revisado por | *(pendiente)* |
 | Estado | Borrador para revisión |
@@ -111,11 +111,13 @@ Cada corrida de ticket usa el carril de concurrencia `upb-ticket-<número>`. As�
 | D-05 | Tickets como issues cifrados (RSA-OAEP + AES-GCM) | Lista de usuarios en un Secret o Variable; formulario externo | Sin lista no hay estado compartido que se corrompa al borrar a alguien. El repositorio es público, así que solo se guarda texto cifrado |
 | D-06 | Una corrida aislada por ticket | Atender a todos en una sola corrida | Pedido explícito. Un error o una eliminación no afecta a nadie más |
 | D-07 | Tu corrida solo enruta números de ticket, no descifra | Validar todo en tu corrida | Menos datos en memoria. Cada ticket se valida en su propia corrida |
-| D-08 | Tickets con ritmo más suave (1 s) y sin tu sala favorita durante 20 s | Mismo ritmo para todos | Limita la carga total y te da prioridad |
+| D-08 | Tickets con ritmo más suave (1 s) que tu corrida | Mismo ritmo para todos | Limita la carga total sobre el sistema de la UPB |
 | D-09 | Panel estático en GitHub Pages. Token y llave solo en el navegador | Backend propio; artifact alojado | Gratis y sin servidor. Un artifact alojado no puede llamar a la API de GitHub |
 | D-10 | Estilo UPBnet, logo enlazado desde su URL oficial y aviso «no oficial» | Diseño propio; copiar el logo al repositorio | Pedido del responsable. No se redistribuye la marca. El servidor de la UPB responde 403 a algunos orígenes, por eso hay respaldo de texto |
 | D-11 | Liberar el ticket con un paso `if: always()` | Confiar en que el bot siempre termina bien | Si la corrida se cancela o vence, el ticket no queda trabado en «en curso» |
 | D-12 | Toda expresión `${{ }}` que lleve `#`, `:` o llaves va entre comillas, y el CI valida con actionlint | Confiar en la revisión visual | En YAML « #» inicia un comentario: el incidente C-10 dejó el workflow inválido sin que ninguna prueba lo notara |
+| D-13 | Sala/horario bloqueados y plazos se publican en `docs/servicio.json` (sin nombres). Lo escribe el panel al guardar Ajustes; el bot aplica el mismo bloqueo con su propia configuración | Valores fijos en la página; leer las Variables desde la página pública | La página pública no tiene token para leer Variables. Así el bloqueo sigue a tus ajustes y nunca expone quién es el dueño |
+| D-14 | Protección contra copias: licencia con todos los derechos reservados, candado de repositorio (workflow y bot) y candado de dominio (panel) | Hacer privado el repositorio; ofuscar el código | Privado exige pago para Pages y limita los minutos de Actions. Ofuscar dificulta mantener y evaluar el proyecto y no impide copiar. Los candados no son infranqueables (el código es visible), pero vuelven inútil una copia «tal cual» y dejan la intención legal explícita |
 
 ## 5. Limitaciones conocidas
 

@@ -488,3 +488,31 @@ def test_workflows_pasan_actionlint():
         pytest.skip("actionlint no está instalado (en el CI sí corre)")
     r = subprocess.run([binario, "-no-color", "-oneline"], cwd=RAIZ, capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+# ───────────────────────── protección contra copias (v4.2) ─────────────────────────
+
+def test_el_bot_no_corre_en_copias_del_repositorio(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_REPOSITORY", "otra-persona/Reserva-De-Salas")
+    monkeypatch.setenv("UPB_NOMBRE", "X")
+    monkeypatch.setenv("UPB_APELLIDO", "Y")
+    monkeypatch.setenv("UPB_CODIGO", "123")
+    assert rb.main() == rb.EXIT_COPIA
+    assert "copia no autorizada" in capsys.readouterr().out.lower()
+
+
+def test_el_bot_si_corre_en_el_repositorio_original():
+    assert rb.repositorio_autorizado("hugozuniga770/Reserva-De-Salas")
+    assert rb.repositorio_autorizado("HugoZuniga770/reserva-de-salas")   # GitHub no distingue mayúsculas
+    assert rb.repositorio_autorizado(None)                               # fuera de Actions (pruebas locales)
+    assert not rb.repositorio_autorizado("otro/Reserva-De-Salas")
+
+
+def test_workflow_con_candado_al_repositorio_original():
+    yml = (RAIZ / ".github" / "workflows" / "reservar.yml").read_text(encoding="utf-8")
+    assert "github.repository == 'hugozuniga770/Reserva-De-Salas'" in yml
+
+
+def test_hay_licencia_con_todos_los_derechos_reservados():
+    lic = (RAIZ / "LICENSE").read_text(encoding="utf-8")
+    assert "Todos los derechos reservados" in lic and "Hugo Rafael Zúñiga Daza" in lic

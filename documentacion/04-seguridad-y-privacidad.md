@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Bot de Reserva de Salas UPB |
 | Documento | Seguridad y privacidad |
-| Versión | 1.0 |
-| Fecha | 05/11/2026 |
+| Versión | 1.1 |
+| Fecha | 07/11/2026 |
 | Responsable | Hugo Rafael Zúñiga Daza |
 | Revisado por | *(pendiente)* |
 | Estado | Borrador para revisión |
@@ -40,7 +40,20 @@
 | Saturar el sistema de la UPB | Ritmo fijo y acotado (RNF-01). Tickets más lentos | Constantes en `reserva_bot.py` |
 | Permisos excesivos de la corrida | `permissions:` mínimos: `contents: read`, `issues: write`, `actions: write` | `reservar.yml` |
 
-## 3. Permisos del fine-grained token del celular
+## 3. Protección contra copias
+
+Un repositorio público se puede ver y descargar: **no existe forma técnica de impedir que alguien copie el código** sin hacerlo privado. Lo que sí hace este proyecto:
+
+| Capa | Qué hace | Dónde |
+| :-- | :-- | :-- |
+| Legal | Licencia con todos los derechos reservados: ver el código está permitido; copiarlo, ejecutarlo o publicarlo, no | `LICENSE`, pie del panel |
+| Candado de repositorio | El workflow solo corre si `github.repository` es el original, y el bot termina con el código 5 en cualquier otro | `reservar.yml`, `REPO_AUTORIZADO` en `reserva_bot.py` |
+| Candado de dominio | El panel publicado en otra dirección muestra «copia no autorizada» y no funciona | `DOMINIOS_AUTORIZADOS` en `docs/index.html` |
+| El servicio no se puede llevar | Una copia nace vacía: no tiene tu código, tu llave privada, tus solicitudes ni tu enlace oficial. Los forks además tienen desactivados los horarios automáticos | Secrets, issues y Pages del repositorio original |
+
+Si encuentras una copia publicada en GitHub, puedes pedir que la retiren con un aviso DMCA: <https://docs.github.com/es/site-policy/content-removal-policies/guide-to-submitting-a-dmca-takedown-notice>. Esto es información general, no asesoría legal.
+
+## 4. Permisos del fine-grained token del celular
 
 Acceso **solo** a `Reserva-De-Salas`, con estos permisos:
 
@@ -49,12 +62,12 @@ Acceso **solo** a `Reserva-De-Salas`, con estos permisos:
 | Actions | Read and write | Correr, probar, detener y lanzar tickets |
 | Variables | Read and write | Ajustes |
 | Issues | Read and write | Aprobar, rechazar y quitar solicitudes |
-| Contents | Read and write | Publicar la llave pública (una vez) |
+| Contents | Read and write | Publicar la llave pública (una vez) y la configuración pública (`servicio.json`) al guardar Ajustes |
 | Metadata | Read | Obligatorio |
 
 Para cron-job.org conviene un **token aparte con solo Actions**.
 
-## 4. Rotación y respuesta a incidentes
+## 5. Rotación y respuesta a incidentes
 
 - **Llave filtrada**: en Guía → paso 3, «Crear una llave nueva». Luego se actualiza el Secret `UPB_CLAVE_PRIVADA`. Las solicitudes cifradas con la llave anterior dejan de poder leerse: hay que pedirlas de nuevo.
 - **Token filtrado**: revocarlo en GitHub → Developer settings, crear uno nuevo y volver a conectar el panel.

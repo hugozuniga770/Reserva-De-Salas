@@ -25,7 +25,8 @@ jobs:
 
   panel:
     name: Panel (Chromium de punta a punta)
-    runs-on: ubuntu-latest
+    # Fijado a 24.04: el 12/11/2026 «ubuntu-latest» pasó a 26.04 y Playwright 1.56 no instala Chromium ahí.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

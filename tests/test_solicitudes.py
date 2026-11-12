@@ -49,10 +49,10 @@ class FuenteFalsa:
         self.comentarios: dict[int, list[str]] = {}
         self.despachados: list[int] = []
 
-    def agregar(self, numero, datos=None, etiquetas=(), crudo=None, fecha=HOY, horario="12:15-14:15", autor=""):
+    def agregar(self, numero, datos=None, etiquetas=(), crudo=None, fecha=HOY, horario="12:15-14:15", autor="", salas=None):
         token = crudo if crudo is not None else sol.cifrar(datos, PUB)
         self.issues[numero] = sol.Issue(numero, f"{sol.MARCADOR}\n\n{token}", set(etiquetas),
-                                        sol.titulo_ticket(fecha, horario), True, autor)
+                                        sol.titulo_ticket(fecha, horario, salas=salas), True, autor)
 
     def listar(self):
         return [i for i in self.issues.values() if i.abierto]
@@ -60,8 +60,10 @@ class FuenteFalsa:
     def obtener(self, n):
         return self.issues.get(n)
 
-    def despachar(self, n, ref="main"):
+    def despachar(self, n, ref="main", salas=None):
         self.despachados.append(n)
+        self.asignadas = getattr(self, "asignadas", {})
+        self.asignadas[n] = salas
         return True
 
     def comentar(self, n, t):
@@ -622,3 +624,54 @@ def test_tu_corrida_no_tumba_un_ticket_excedente_que_ya_esta_corriendo(servidor)
     f.agregar(2, solicitud(), etiquetas={"aprobada", "en-curso"}, fecha=HOY, autor="ana")
     principal(url, f, max_personas=9).ejecutar()
     assert f.issues[2].abierto and "invalida" not in f.issues[2].etiquetas
+
+
+# ───────────────────────── reparto de primera sala (nadie pelea por la misma al abrir) ─────────────────────────
+
+def _its(n, salas, fecha="2026-11-13", horario="12:15-14:15"):
+    return sol.Issue(n, sol.MARCADOR, set(), sol.titulo_ticket(fecha, horario, "REF001", salas), True, "x")
+
+
+def test_titulo_lleva_las_salas_en_letras_y_se_leen_de_vuelta():
+    t = _its(1, ["6", "15", "3"])
+    assert "· salas D,B,C ·" in t.titulo and t.salas == ["6", "15", "3"]
+    assert sol.Issue(2, "", set(), "Solicitud de reserva · 2026-11-13 · 12:15-14:15 · ref ABC123", True).salas == []
+
+
+def test_repartir_da_primera_sala_distinta_a_cada_uno():
+    """Ana y Luis piden D,B,C; Carla pide D,C. Llegaron en ese orden: D para Ana, B para Luis, C para Carla."""
+    r = sol.repartir_salas([_its(1, ["6", "15", "3"]), _its(2, ["6", "15", "3"]), _its(3, ["6", "3"])])
+    assert r == {1: ["6", "15", "3"], 2: ["15", "6", "3"], 3: ["3", "6"]}
+
+
+def test_repartir_solo_reordena_dentro_de_lo_que_cada_uno_pidio():
+    r = sol.repartir_salas([_its(1, ["6"]), _its(2, ["6"])])
+    assert r == {1: ["6"], 2: ["6"]}   # el 2 no tiene alternativa: conserva su lista, su corrida esperará la D
+    r = sol.repartir_salas([_its(1, ["6", "15"]), _its(2, ["6"]), _its(3, ["15", "6"])])
+    assert r[2] == ["6"] and r[3] == ["15", "6"] and r[1] == ["6", "15"]
+
+
+def test_repartir_no_mezcla_dias_ni_horarios():
+    r = sol.repartir_salas([_its(1, ["6", "15"]), _its(2, ["6", "15"], fecha="2026-11-14"), _its(3, ["6", "15"], horario="10:00-12:00")])
+    assert r[1][0] == r[2][0] == r[3][0] == "6"
+
+
+def test_tu_corrida_lanza_cada_ticket_con_su_primera_sala_asignada(servidor):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(1, solicitud(salas=("6", "15")), etiquetas={"aprobada"}, autor="ana", salas=["6", "15"])
+    f.agregar(2, solicitud(salas=("6", "15")), etiquetas={"aprobada"}, autor="luis", salas=["6", "15"])
+    principal(url, f, max_personas=9).ejecutar()
+    assert f.despachados == [1, 2] and f.asignadas == {1: ["6", "15"], 2: ["15", "6"]}
+
+
+def test_corrida_de_ticket_respeta_el_orden_asignado_pero_nunca_una_sala_ajena(servidor, monkeypatch):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(7, solicitud(salas=("6", "15")), etiquetas={"aprobada", "en-curso"})
+    monkeypatch.setenv("UPB_SALAS_ASIGNADAS", "15,6")
+    b = ticket(url, f, 7)
+    assert b.preparar_ticket(b.obtener()).salas == ["15", "6"]
+    monkeypatch.setenv("UPB_SALAS_ASIGNADAS", "8,6")   # la F no la pidió: se ignora el reparto entero
+    b = ticket(url, f, 7)
+    assert b.preparar_ticket(b.obtener()).salas == ["6", "15"]

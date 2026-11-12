@@ -542,6 +542,8 @@ class Bot:
             log(f"No pude leer los tickets ({e.__class__.__name__}); lo reintento luego.")
             return
         tickets = self.limpiar_excedentes(tickets)
+        from solicitudes import repartir_salas
+        reparto = repartir_salas(tickets)   # primera sala distinta para cada uno del mismo día y hora
         en_curso = sum(1 for t in tickets if "en-curso" in t.etiquetas)
         cupo = self.cfg.max_personas - 1
         for t in tickets:
@@ -552,7 +554,7 @@ class Bot:
                     self.aviso_cupo.add(t.numero)
                     log(f"Ticket #{t.numero}: cupo lleno ({self.cfg.max_personas} personas por noche); queda en espera.")
                 continue
-            if self.fuente.despachar(t.numero, self.ref):
+            if self.fuente.despachar(t.numero, self.ref, reparto.get(t.numero)):
                 self.fuente.etiquetar(t.numero, ["en-curso"])
                 en_curso += 1
                 self.resumen.append(f"Ticket #{t.numero}: corrida aislada lanzada")
@@ -637,6 +639,10 @@ class Bot:
                   datos["codigo"], datos["ntfy"]):
             if v and len(v) >= 4:
                 print(f"::add-mask::{v}", flush=True)  # GitHub oculta estos datos en los logs públicos
+        asignadas = [x for x in os.getenv("UPB_SALAS_ASIGNADAS", "").split(",") if x]
+        if asignadas and set(asignadas) <= set(datos["salas"]):
+            # orden que repartió tu corrida: primero la sala que nadie más tiene de primera; nunca una que no pidió
+            datos["salas"] = asignadas + [x for x in datos["salas"] if x not in asignadas]
         log(f"Ticket #{n}: {datos['horario']} el {datos['fecha']}, salas {datos['salas']}")
         return Persona(nombre=datos["nombre"], apellido=datos["apellido"], codigo=datos["codigo"],
                        salas=datos["salas"], horario=datos["horario"], proposito=datos["proposito"],

@@ -19,7 +19,7 @@
 | Código del responsable | Secret `UPB_CODIGO` | Solo el bot (GitHub lo oculta en los registros) | Hasta que se cambie |
 | Nombre y motivo del responsable | Variables o Secrets | Bot. El nombre ya es visible en el calendario de la UPB | Hasta que se cambie |
 | Datos de un solicitante (nombre, código, salas, fecha) | Issue, **cifrado** | Solo el bot y el panel con la llave privada | Hasta que su corrida termina. Luego se **borran** |
-| Fecha, horario y referencia de un ticket | Título del issue, en claro | Cualquiera | Permanente (no es dato personal) |
+| Fecha, horario, salas pedidas (letras) y referencia de un ticket | Título del issue, en claro | Cualquiera | Permanente (no es dato personal; las salas en claro permiten repartir una primera sala distinta a cada uno sin descifrar) |
 | Resultado («✅ Sala D · 12:15–14:15 · fecha») | Comentario del issue | Cualquiera | Permanente (sin datos personales) |
 | Token del administrador | `localStorage` del navegador del celular | Solo ese navegador | Hasta «Desconectar» |
 | Llave privada | `localStorage` del celular y Secret `UPB_CLAVE_PRIVADA` | Responsable y bot | Hasta que se rote |

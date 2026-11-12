@@ -36,7 +36,7 @@ CLAVE = sol.cargar_clave_privada(PRIV)
 def ticket(numero, fecha, etiquetas=(), estado="open", ref="ABC234", nombre="Ana María", codigo="81234", salas=("6", "15")):
     datos = {"v": 1, "nombre": nombre, "apellido": "Pérez Soto", "codigo": codigo, "proposito": "Repaso de cálculo",
              "horario": "12:15-14:15", "salas": list(salas), "fecha": fecha, "ntfy": ""}
-    return {"number": numero, "title": f"Solicitud de reserva · {fecha} · 12:15-14:15 · ref {ref}",
+    return {"number": numero, "title": sol.titulo_ticket(fecha, "12:15-14:15", ref, list(salas)),
             "body": f"{sol.MARCADOR}\nSolicitud cifrada.\n\n{sol.cifrar(datos, PUB)}\n", "state": estado,
             "labels": [{"name": e} for e in etiquetas], "user": {"login": "ana-upb"}}
 
@@ -219,6 +219,11 @@ def main():
         assert "lleno" in clase("jue. 12 de noviembre") and pag.is_disabled('button[aria-label^="jue. 12 de noviembre"]'), "día lleno debe cerrarse"
         assert "poco" in clase("mar. 10 de noviembre") and pag.get_attribute('button[aria-label^="mar. 10 de noviembre"]', "data-quedan") == "2 libres"
         pag.wait_for_selector("text=Tienes 0 de 2 solicitudes activas")
+        # Colisión de primera sala: el viernes 6 ya tiene a Ana con D de 1ª → la Sala D avisa «ya pedida de 1ª»
+        pag.click('button[aria-label^="vie. 6 de noviembre"]')
+        pag.wait_for_selector("text=ya pedida de 1ª")
+        pag.click('button[aria-label^="vie. 6 de noviembre"]')
+        assert pag.query_selector("text=ya pedida de 1ª") is None
         resultados["cupos_en_calendario"] = "OK"
         # Sala F bloqueada solo de 12:15 a 14:15
         f_boton = '.sala-opcion[aria-label^="Sala de estudio F"], .sala-opcion:has-text("Sala F")'
@@ -249,6 +254,7 @@ def main():
         q = parse_qs(urlparse(enlaces[0]).query)
         titulo, cuerpo = q["title"][0], q["body"][0]
         assert "2026-11-06" in titulo and "Ana" not in titulo and "81234" not in titulo, titulo
+        assert "salas D,B" in titulo, "las salas van en claro en el título (no son dato personal); nombre y código no"
         assert "81234" not in cuerpo and "Ana" not in cuerpo, "el cuerpo solo debe llevar datos cifrados"
         datos = sol.descifrar(cuerpo, CLAVE)  # ← el bot puede leer lo que cifró el navegador
         assert datos["codigo"] == "81234" and datos["salas"] == ["6", "15"] and datos["fecha"] == "2026-11-06", datos

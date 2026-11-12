@@ -207,6 +207,7 @@ textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospa
 .sala-opcion[disabled]{cursor:not-allowed;opacity:.55;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.04) 6px 7px)}
 .sala-opcion .bloq{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;text-align:left}
 .sala-opcion .nodisp{color:var(--t-mal);font-weight:600;font-size:11px}
+.sala-opcion .ocupada{color:#8a6d1f;font-weight:600;font-size:11px}
 .plazos{margin:0;padding-left:18px}.plazos li{margin-bottom:6px}
 
 /* listas de corridas y tickets */
@@ -386,7 +387,7 @@ const duracion = (min) => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h $
    abiertos (fecha · horario · ref): no hay datos personales. Cierra en el calendario lo que ya está pedido. */
 function ocupacionDe(issues) {
   const activos = (issues || []).filter((i) => !i.pull_request && i.state === "open" && !(i.labels || []).some((l) => ["invalida", "rechazada", "sin-sala"].includes(l.name)));
-  const fila = (t) => { const m = /(\d{4}-\d{2}-\d{2}) · (\d{1,2}:\d{2}-\d{1,2}:\d{2})(?: · ref ([A-Z0-9]{6}))?/.exec(t || ""); return m ? {fecha: m[1], horario: m[2], ref: m[3] || ""} : null; };
+  const fila = (t) => { const m = /(\d{4}-\d{2}-\d{2}) · (\d{1,2}:\d{2}-\d{1,2}:\d{2})(?: · salas ([A-Z,]+))?(?: · ref ([A-Z0-9]{6}))?/.exec(t || ""); return m ? {fecha: m[1], horario: m[2], salas: m[3] ? m[3].split(",") : [], ref: m[4] || ""} : null; };
   const filas = activos.map((i) => fila(i.title)).filter(Boolean);
   const mias = new Set(guardado.json("mis_tickets", []).map((x) => x.ref));
   const miasActivas = filas.filter((f) => f.ref && mias.has(f.ref));
@@ -402,10 +403,22 @@ function ocupacionDe(issues) {
       const quedan = Math.max(0, Math.min(salas - pedidas, cupo - noche));
       return {salas, pedidas, noche, cupo, quedan, lleno: quedan === 0, mio: this.misFechas.has(fecha)};
     },
+    /* Cuántas personas ya pidieron cada sala como PRIMERA opción en esos días y ese horario (máximo entre los días). */
+    primeras(fechas, horario) {
+      const r = {};
+      for (const f of fechas) {
+        const c = {};
+        filas.filter((x) => x.fecha === f && x.horario === horario && x.salas[0]).forEach((x) => { c[x.salas[0]] = (c[x.salas[0]] || 0) + 1; });
+        for (const [l, n] of Object.entries(c)) r[l] = Math.max(r[l] || 0, n);
+      }
+      return r;
+    },
   };
 }
 const nuevaRef = () => { const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const b = crypto.getRandomValues(new Uint8Array(6)); return Array.from(b, (x) => a[x % a.length]).join(""); };
 const refDeTitulo = (t) => (String(t || "").match(/ref ([A-Z0-9]{6})/) || [])[1] || "";
+const letrasDe = (ids) => ids.map((id) => (sala(id) || {}).l).filter(Boolean).join(",");
+const tituloTicket = (fecha, horario, ref, ids = []) => `Solicitud de reserva · ${fecha} · ${horario}` + (ids.length ? ` · salas ${letrasDe(ids)}` : "") + ` · ref ${ref}`;
 const fechaDeTitulo = (t) => (String(t || "").match(/(\d{4}-\d{2}-\d{2})/) || [])[1] || "";
 const horarioDeTitulo = (t) => (String(t || "").match(/(\d{1,2}:\d{2}-\d{1,2}:\d{2})/) || [])[1] || "";
 async function copiar(texto, msg = "Copiado.") {
@@ -674,9 +687,10 @@ function formularioTicket({admin = false, alPreparar, ocupacion = ocupacionDe(nu
     if (bloqueada(s.id, horario)) return h("button", {type: "button", class: "sala-opcion", disabled: true, "aria-label": `${s.n}: no disponible en este horario`},
       tecla(s.id), h("span", {class: "bloq"}, s.n.replace("Sala de estudio ", "Sala "), h("small", {class: "nodisp"}, "No disponible a esta hora")));
     const pos = salasElegidas.indexOf(s.id);
-    return h("button", {type: "button", class: "sala-opcion", "aria-pressed": pos >= 0 ? "true" : "false",
+    const n1 = !admin && ocupacion.cargada && fechas.size ? (ocupacion.primeras([...fechas], horario)[s.l] || 0) : 0;
+    return h("button", {type: "button", class: "sala-opcion", "aria-pressed": pos >= 0 ? "true" : "false", title: n1 ? `${n1} persona(s) ya la pidieron de primera para esos días` : null,
       onclick: () => { pos >= 0 ? salasElegidas.splice(pos, 1) : salasElegidas.push(s.id); pintarSalas(); }},
-      tecla(s.id), h("span", null, s.n.replace("Sala de estudio ", "Sala ")), h("span", {class: "orden"}, pos >= 0 ? `${pos + 1}ª` : ""));
+      tecla(s.id), h("span", {class: n1 ? "bloq" : ""}, s.n.replace("Sala de estudio ", "Sala "), n1 ? h("small", {class: "ocupada"}, n1 === 1 ? "ya pedida de 1ª" : `pedida de 1ª por ${n1}`) : null), h("span", {class: "orden"}, pos >= 0 ? `${pos + 1}ª` : ""));
   }));
   pintarSalas();
   errores.salas = h("div", {class: "error-campo", role: "alert"});
@@ -687,6 +701,7 @@ function formularioTicket({admin = false, alPreparar, ocupacion = ocupacionDe(nu
   const riesgo = h("label", {class: "check grupo oculto", style: "margin-top:8px"}, h("input", {type: "checkbox", id: "t-riesgo"}),
     h("span", null, "Entiendo que para los días marcados en ámbar o rojo la reserva no está garantizada."));
   const actualizarResumen = () => {
+    pintarSalas();
     const l = [...fechas].sort();
     const cuenta = !admin && ocupacion.cargada ? ` Tienes ${ocupacion.misActivas} de ${limite} solicitudes activas.` : "";
     resumenFechas.textContent = (l.length ? `${l.length} día(s): ${l.map((x) => { const t = sitDia(x).texto; return fechaLarga(x) + (t ? ` (${t})` : ""); }).join(", ")}.` : "Toca uno o varios días. Cada día es una solicitud aparte.") + cuenta;
@@ -731,7 +746,8 @@ function formularioTicket({admin = false, alPreparar, ocupacion = ocupacionDe(nu
       for (const fecha of [...fechas].sort()) {
         const ref = nuevaRef();
         const token = await UPBCifrado.cifrar({v: 1, ...datos, horario, salas: salasElegidas.filter((id) => !bloqueada(id, horario)), fecha, ntfy: ntfy ? v("t-ntfy") : ""}, pub);
-        tickets.push({ref, fecha, horario, titulo: `Solicitud de reserva · ${fecha} · ${horario} · ref ${ref}`,
+        const idsSalas = salasElegidas.filter((id) => !bloqueada(id, horario));
+        tickets.push({ref, fecha, horario, salas: idsSalas, titulo: tituloTicket(fecha, horario, ref, idsSalas),
           cuerpo: `${MARCADOR}\nSolicitud cifrada para el bot de reservas. Solo el bot puede leerla y la borra después de usarla.\n\n${token}\n`, token});
       }
       // Datos personales: fuera de la pantalla y de la memoria del formulario.
@@ -780,6 +796,7 @@ async function vistaPedir(c) {
       h("li", null, "Tus datos se cifran en este teléfono: en GitHub nadie más puede leerlos y el bot los borra apenas los usa."),
       h("li", null, "Solo salas de estudio. Si tu primera opción ya está tomada, prueba la siguiente."),
       h("li", null, `Máximo ${Math.max(1, +SERVICIO.por_persona || 2)} solicitudes activas por persona y una por día. Los días rayados ya están llenos.`),
+      h("li", null, "Si una sala ya la pidió otro de primera, elige otra como 1ª: el bot da a cada persona una primera sala distinta para que nadie pelee al abrir."),
       h("li", null, "Necesitas una cuenta de GitHub para enviar (es gratis). Si no tienes, copia el texto y mándaselo al administrador por WhatsApp."),
       h("li", null, "Sigue tu solicitud en «Estado» con el código de referencia."))}))));
 }
@@ -814,7 +831,7 @@ function mostrarParaEnviar(destino, tickets) {
   tickets.forEach((t) => mias.push({ref: t.ref, fecha: t.fecha, horario: t.horario}));
   guardado.set("mis_tickets", JSON.stringify(mias.slice(-40)));
   const url = (t) => `https://github.com/${repo()}/issues/new?title=${encodeURIComponent(t.titulo)}&body=${encodeURIComponent(t.cuerpo)}`;
-  const textoWsp = "Solicitudes de sala (cifradas):\n" + tickets.map((t) => `UPB|${t.fecha}|${t.horario}|${t.ref}|${t.token}`).join("\n");
+  const textoWsp = "Solicitudes de sala (cifradas):\n" + tickets.map((t) => `UPB|${t.fecha}|${t.horario}|${t.ref}|${t.token}|${letrasDe(t.salas || [])}`).join("\n");
   destino.replaceChildren(caja({tipo: "success", titulo: tickets.length > 1 ? `${tickets.length} solicitudes listas` : "Solicitud lista", icono: "check",
     cuerpo: h("div", null,
       h("p", {style: "margin-top:0"}, "Envía cada una a GitHub y toca «Submit new issue». Guarda tus códigos de referencia para ver el estado."),
@@ -987,9 +1004,10 @@ async function vistaTickets(c) {
         const lineas = ta.value.split(/\n/).map((x) => x.trim()).filter((x) => x.startsWith("UPB|"));
         if (!lineas.length) throw new Error("No encontré líneas que empiecen con «UPB|».");
         for (const l of lineas) {
-          const [, fecha, hor, ref, token] = l.split("|");
+          const [, fecha, hor, ref, token, letras] = l.split("|");
           if (!UPBCifrado.PATRON.test(token || "")) throw new Error("Una de las líneas está incompleta: pide que la copien de nuevo.");
-          await api("/issues", {metodo: "POST", cuerpo: {title: `Solicitud de reserva · ${fecha} · ${hor} · ref ${ref}`, body: `${MARCADOR}\nSolicitud cifrada recibida por WhatsApp.\n\n${token}\n`, labels: ["aprobada"]}});
+          const ids = String(letras || "").split(",").map((x) => (SALAS.find((s) => s.l === x.trim()) || {}).id).filter(Boolean);
+          await api("/issues", {metodo: "POST", cuerpo: {title: tituloTicket(fecha, hor, ref, ids), body: `${MARCADOR}\nSolicitud cifrada recibida por WhatsApp.\n\n${token}\n`, labels: ["aprobada"]}});
         }
         ta.value = ""; aviso(`${lineas.length} solicitud(es) creada(s).`, "ok"); cargar();
       }), "enviar"))); })())}));

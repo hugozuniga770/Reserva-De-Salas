@@ -146,6 +146,12 @@ class Issue:
     autor: str = ""          # login de GitHub de quien abrió el ticket (no es un dato personal del formulario)
 
     @property
+    def salas(self) -> list[str]:
+        """Salas pedidas, en orden, escritas en claro en el título («salas D,B»). No son un dato personal."""
+        m = re.search(r"salas ([A-Z](?:,[A-Z])*)", self.titulo or "")
+        return [LETRA_A_ID[x] for x in m.group(1).split(",") if x in LETRA_A_ID] if m else []
+
+    @property
     def horario(self) -> str:
         m = re.search(r"\b(\d{1,2}:\d{2}-\d{1,2}:\d{2})\b", self.titulo or "")
         return m.group(1) if m else ""
@@ -161,6 +167,38 @@ class Issue:
 
 
 BORRADO = "Datos borrados por el bot después de usarlos. Este ticket ya no contiene información."
+
+
+# Salas de estudio: letra ↔ id del formulario de la UPB (ver formulario.md)
+LETRA_A_ID = {"F": "8", "D": "6", "B": "15", "C": "3", "G": "9", "H": "14"}
+ID_A_LETRA = {v: k for k, v in LETRA_A_ID.items()}
+
+
+def repartir_salas(tickets: list[Issue]) -> dict[int, list[str]]:
+    """Primera sala distinta para cada ticket del mismo día y horario (función pura, probada).
+
+    Los tickets del mismo (fecha, horario), por orden de llegada (número), van tomando como primera
+    opción la primera de SUS salas que nadie eligió antes; el resto de su lista queda en su orden.
+    Así dos personas no pelean por la misma sala al abrir. Si todas sus salas ya son la primera de
+    otro, conserva su orden (su corrida saltará sola a la siguiente libre). Solo se reordena dentro
+    de las salas que la persona pidió: nunca se le asigna una que no eligió.
+    Devuelve {numero: salas_reordenadas} solo para los tickets con salas en el título.
+    """
+    grupos: dict[tuple, list[Issue]] = {}
+    for t in sorted(tickets, key=lambda i: i.numero):
+        if t.abierto and t.salas:
+            grupos.setdefault((t.fecha, t.horario), []).append(t)
+    orden: dict[int, list[str]] = {}
+    for grupo in grupos.values():
+        tomadas: set[str] = set()
+        for t in grupo:
+            primera = next((s for s in t.salas if s not in tomadas), None)
+            if primera is None:
+                orden[t.numero] = list(t.salas)
+                continue
+            tomadas.add(primera)
+            orden[t.numero] = [primera] + [s for s in t.salas if s != primera]
+    return orden
 
 
 def excedentes(tickets: list[Issue], por_persona: int = 2, exentos: set[str] | None = None) -> list[tuple[Issue, str]]:
@@ -188,9 +226,10 @@ def excedentes(tickets: list[Issue], por_persona: int = 2, exentos: set[str] | N
     return sobran
 
 
-def titulo_ticket(fecha: date | str, horario: str, ref: str = "") -> str:
-    """Solo datos NO personales: fecha, horario y una referencia aleatoria para seguir el estado."""
-    return f"Solicitud de reserva · {fecha} · {horario}" + (f" · ref {ref}" if ref else "")
+def titulo_ticket(fecha: date | str, horario: str, ref: str = "", salas: list[str] | None = None) -> str:
+    """Solo datos NO personales: fecha, horario, salas pedidas (letras) y una referencia aleatoria."""
+    letras = ",".join(ID_A_LETRA[x] for x in (salas or []) if x in ID_A_LETRA)
+    return f"Solicitud de reserva · {fecha} · {horario}" + (f" · salas {letras}" if letras else "") + (f" · ref {ref}" if ref else "")
 
 
 class GitHubIssues:
@@ -224,11 +263,15 @@ class GitHubIssues:
         i = r.json()
         return None if "pull_request" in i else self._issue(i)
 
-    def despachar(self, numero: int, ref: str = "main") -> bool:
-        """Lanza la corrida AISLADA de este ticket (workflow_dispatch con input ticket)."""
+    def despachar(self, numero: int, ref: str = "main", salas: list[str] | None = None) -> bool:
+        """Lanza la corrida AISLADA de este ticket (workflow_dispatch con input ticket y, si hubo
+        reparto, el orden de salas asignado: solo salas que la persona pidió)."""
+        inputs = {"ticket": str(numero)}
+        if salas:
+            inputs["salas"] = ",".join(salas)
         try:
             self.s.post(f"{self.base}/actions/workflows/reservar.yml/dispatches",
-                        json={"ref": ref, "inputs": {"ticket": str(numero)}}, timeout=20).raise_for_status()
+                        json={"ref": ref, "inputs": inputs}, timeout=20).raise_for_status()
             return True
         except requests.RequestException as e:
             self.log(f"No pude lanzar la corrida del ticket #{numero} ({e.__class__.__name__}).")

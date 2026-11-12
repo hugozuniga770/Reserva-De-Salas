@@ -80,7 +80,7 @@ La **barra superior** siempre muestra el estado del bot (● Vigilando, En cola,
   - **Rechazar**: no se atenderá. Si estaba corriendo, se detiene.
   - **Quitar y borrar datos**: la cierra y borra lo cifrado.
   - **Agregar una solicitud** o **Pegar texto de WhatsApp**: para pedidos que te llegan por chat. Se crean ya aprobadas.
-- **Ajustes**: nombre, apellido, motivo, horario, orden de salas, auto-aprobación (on/off y hora), personas por noche y pausa. Al guardar, la página pública se actualiza sola: tu primera sala en tu horario aparece como «no disponible» y la hora de auto-aprobación es el plazo que ven los solicitantes. Esto crea un commit: después corre `git pull` en tu PC antes de subir algo.
+- **Ajustes**: nombre, apellido, motivo, horario, orden de salas, auto-aprobación (on/off y hora), personas por noche, solicitudes activas por persona (2 por defecto, y una por día) y pausa. Al guardar, la página pública se actualiza sola: tu primera sala en tu horario aparece como «no disponible» y la hora de auto-aprobación es el plazo que ven los solicitantes. Esto crea un commit: después corre `git pull` en tu PC antes de subir algo.
 
 ### B.3 Varios teléfonos
 

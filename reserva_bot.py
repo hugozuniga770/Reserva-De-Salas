@@ -174,6 +174,7 @@ class Config:
     auto_aprobar: bool = True
     auto_aprobar_bo: str = "18:30"
     max_personas: int = 4
+    por_persona: int = 2      # solicitudes activas por persona (UPB_MAX_POR_PERSONA)
     reloj: Callable[[], datetime] = field(default=lambda: datetime.now(BO_TZ))
     dormir: Callable[[float], None] = time.sleep
 
@@ -222,6 +223,7 @@ class Config:
             auto_aprobar=os.getenv("UPB_AUTO_APROBAR", "1").strip().lower() in ("1", "true", "si", "sí", "yes"),
             auto_aprobar_bo=(os.getenv("UPB_AUTO_APROBAR_BO", "18:30").strip() or "18:30"),
             max_personas=max(1, int(os.getenv("UPB_MAX_PERSONAS", "4").strip() or "4")),
+            por_persona=max(1, int(os.getenv("UPB_MAX_POR_PERSONA", "2").strip() or "2")),
         )
 
 
@@ -539,6 +541,7 @@ class Bot:
         except Exception as e:
             log(f"No pude leer los tickets ({e.__class__.__name__}); lo reintento luego.")
             return
+        tickets = self.limpiar_excedentes(tickets)
         en_curso = sum(1 for t in tickets if "en-curso" in t.etiquetas)
         cupo = self.cfg.max_personas - 1
         for t in tickets:
@@ -554,6 +557,27 @@ class Bot:
                 en_curso += 1
                 self.resumen.append(f"Ticket #{t.numero}: corrida aislada lanzada")
                 log(f"Ticket #{t.numero}: lancé su corrida aislada.")
+
+    def limpiar_excedentes(self, tickets: list) -> list:
+        """Descarta (sin descifrar nada) los tickets que se pasan del límite por persona o repiten un día.
+        El dueño del repositorio no se limita. Devuelve los tickets que siguen vivos."""
+        from solicitudes import excedentes
+        duenio = (os.getenv("UPB_REPO") or os.getenv("GITHUB_REPOSITORY") or REPO_AUTORIZADO).split("/")[0]
+        sobran = excedentes(tickets, self.cfg.por_persona, {duenio} if duenio else set())
+        fuera = set()
+        for t, motivo in sobran:
+            if "en-curso" in t.etiquetas:
+                continue  # ya está corriendo: no la tumbo a mitad de camino
+            log(f"Ticket #{t.numero} descartado: {motivo}")
+            try:
+                self.fuente.comentar(t.numero, f"❌ Solicitud descartada: {motivo}.")
+                self.fuente.etiquetar(t.numero, ["invalida"])
+                self.fuente.borrar_datos(t.numero)
+                self.fuente.cerrar(t.numero)
+                fuera.add(t.numero)
+            except Exception as e:
+                log(f"Ticket #{t.numero}: no pude cerrarlo ({e.__class__.__name__}); lo reintento luego.")
+        return [t for t in tickets if t.numero not in fuera]
 
     def cerrar_ticket(self, per: Persona, etiqueta: str, texto: str) -> None:
         """Comenta el resultado (sin datos personales), BORRA los datos cifrados y cierra."""

@@ -197,9 +197,13 @@ textarea.control{min-height:90px;font-family:ui-monospace,Menlo,Consolas,monospa
 .cal button[aria-pressed="true"] .num{font-weight:700}
 .cal button.tarde{box-shadow:inset 0 -4px 0 var(--amarillo)}
 .cal button.cancel{box-shadow:inset 0 -4px 0 var(--rojo)}
+.cal button.lleno,.cal button.mio{cursor:default;color:var(--suave);background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.06) 6px 7px)}
+.cal button.lleno .num::after{content:"lleno";display:block;font-size:9px;font-weight:600;color:var(--rojo);line-height:1}
+.cal button.mio .num::after{content:"tuyo";display:block;font-size:9px;font-weight:600;color:var(--azul);line-height:1}
+.cal button .cupo{display:block;font-size:9px;font-weight:600;color:#8a6d1f;line-height:1;white-space:nowrap}
 .leyenda{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--suave);margin-top:6px}
 .leyenda span::before{content:"";display:inline-block;width:12px;height:4px;margin-right:5px;vertical-align:middle;background:var(--borde)}
-.leyenda .l-tarde::before{background:var(--amarillo)}.leyenda .l-cancel::before{background:var(--rojo)}
+.leyenda .l-tarde::before{background:var(--amarillo)}.leyenda .l-cancel::before{background:var(--rojo)}.leyenda .l-lleno::before{background:repeating-linear-gradient(135deg,#bbb 0 2px,transparent 2px 4px)}
 .sala-opcion[disabled]{cursor:not-allowed;opacity:.55;background:repeating-linear-gradient(135deg,transparent 0 6px,rgba(0,0,0,.04) 6px 7px)}
 .sala-opcion .bloq{display:flex;flex-direction:column;align-items:flex-start;line-height:1.2;text-align:left}
 .sala-opcion .nodisp{color:var(--t-mal);font-weight:600;font-size:11px}
@@ -343,7 +347,7 @@ const minutosBO = () => { const a = boAhora(); return a.getUTCHours() * 60 + a.g
 // El sistema de la UPB pasa al día siguiente a las 20:00 BO.
 const fechaServidor = () => { const a = boAhora(); return minutosBO() >= 20 * 60 ? sumarDias(isoDe(a), 1) : isoDe(a); };
 /* Configuración pública del servicio (docs/servicio.json): sala/horario bloqueados y plazos. Sin nombres. */
-let SERVICIO = {bloqueo: {sala: "8", horario: "12:15-14:15"}, inicio: "15:30", plazo: "18:30", apertura: "20:00", fin: "21:15"};
+let SERVICIO = {bloqueo: {sala: "8", horario: "12:15-14:15"}, inicio: "15:30", plazo: "18:30", apertura: "20:00", fin: "21:15", cupo: 3, por_persona: 2};
 let _servicioCargado = false;
 async function cargarServicio() {
   if (_servicioCargado) return;
@@ -378,6 +382,28 @@ function llegoTarde(creadoIso, fecha) {
 const fechaLarga = (iso) => { const d = new Date(iso + "T00:00:00Z"); return `${DIAS[d.getUTCDay()]} ${d.getUTCDate()} de ${MESES[d.getUTCMonth()]}`; };
 const horaBO = (isoUtc) => { if (!isoUtc) return ""; const d = new Date(new Date(isoUtc).getTime() - 4 * 3600e3); return `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`; };
 const duracion = (min) => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, "0")} min`;
+/* Ocupación pública: cuántas solicitudes activas hay por día y horario. Se lee del título de los issues
+   abiertos (fecha · horario · ref): no hay datos personales. Cierra en el calendario lo que ya está pedido. */
+function ocupacionDe(issues) {
+  const activos = (issues || []).filter((i) => !i.pull_request && i.state === "open" && !(i.labels || []).some((l) => ["invalida", "rechazada", "sin-sala"].includes(l.name)));
+  const fila = (t) => { const m = /(\d{4}-\d{2}-\d{2}) · (\d{1,2}:\d{2}-\d{1,2}:\d{2})(?: · ref ([A-Z0-9]{6}))?/.exec(t || ""); return m ? {fecha: m[1], horario: m[2], ref: m[3] || ""} : null; };
+  const filas = activos.map((i) => fila(i.title)).filter(Boolean);
+  const mias = new Set(guardado.json("mis_tickets", []).map((x) => x.ref));
+  const miasActivas = filas.filter((f) => f.ref && mias.has(f.ref));
+  return {
+    cargada: !!issues,
+    misActivas: miasActivas.length,
+    misFechas: new Set(miasActivas.map((f) => f.fecha)),
+    de(fecha, horario) {
+      const salas = SALAS.filter((s) => !bloqueada(s.id, horario)).length;
+      const pedidas = filas.filter((f) => f.fecha === fecha && f.horario === horario).length;
+      const noche = filas.filter((f) => f.fecha === fecha).length;
+      const cupo = Math.max(0, +SERVICIO.cupo || 3);
+      const quedan = Math.max(0, Math.min(salas - pedidas, cupo - noche));
+      return {salas, pedidas, noche, cupo, quedan, lleno: quedan === 0, mio: this.misFechas.has(fecha)};
+    },
+  };
+}
 const nuevaRef = () => { const a = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; const b = crypto.getRandomValues(new Uint8Array(6)); return Array.from(b, (x) => a[x % a.length]).join(""); };
 const refDeTitulo = (t) => (String(t || "").match(/ref ([A-Z0-9]{6})/) || [])[1] || "";
 const fechaDeTitulo = (t) => (String(t || "").match(/(\d{4}-\d{2}-\d{2})/) || [])[1] || "";
@@ -585,12 +611,13 @@ function calendario({seleccion, alCambiar, min, max, horario, situacion = () => 
         const fuera = iso < min || iso > max || domingo;
         const sel = seleccion.has(iso);
         const sit = fuera ? {clase: "", texto: ""} : situacion(iso);
-        const b = h("button", {type: "button", disabled: fuera, "aria-pressed": sel ? "true" : "false",
+        const b = h("button", {type: "button", disabled: fuera || !!sit.bloquea, "aria-pressed": sel ? "true" : "false", "data-quedan": sit.quedan || null,
           "aria-label": `${fechaLarga(iso)}${domingo ? " (domingo: sin reservas)" : ""}${sit.texto ? ` (${sit.texto})` : ""}`,
           title: sit.texto || null,
           class: [iso === hoy ? "hoy" : "", iso.slice(0, 7) !== mes ? "otro-mes" : "", sit.clase === "ok" ? "" : sit.clase].join(" ").trim(),
           onclick: () => { sel ? seleccion.delete(iso) : seleccion.add(iso); alCambiar(); dibujar(); }},
           h("span", {class: "num"}, d.getUTCDate()),
+          sit.quedan ? h("span", {class: "cupo"}, sit.quedan) : null,
           sel ? h("span", {class: "evento"}, horario().split("-")[0]) : null);
         tr.append(h("td", null, b));
       }
@@ -605,15 +632,25 @@ function calendario({seleccion, alCambiar, min, max, horario, situacion = () => 
         h("h4", null, `${MESES[m - 1]} ${a}`),
         boton("›", "btn-default btn-sm", () => mover(1), null, {"aria-label": "Mes siguiente"})),
       tabla,
-      h("div", {class: "leyenda"}, h("span", null, "a tiempo"), h("span", {class: "l-tarde"}, "pasó el plazo (sin garantía)"), h("span", {class: "l-cancel"}, "ya abierto (solo cancelaciones)")));
+      h("div", {class: "leyenda"}, h("span", null, "a tiempo"), h("span", {class: "l-tarde"}, "pasó el plazo (sin garantía)"), h("span", {class: "l-cancel"}, "ya abierto (solo cancelaciones)"), h("span", {class: "l-lleno"}, "lleno: ya no hay lugar a esa hora")));
   }
   dibujar();
   return raiz;
 }
 
 /* Formulario de solicitud: lo usan la página pública y el panel. Nada se guarda: se cifra y se olvida. */
-function formularioTicket({admin = false, alPreparar}) {
+function formularioTicket({admin = false, alPreparar, ocupacion = ocupacionDe(null)}) {
   const fechas = new Set();
+  const limite = Math.max(1, +SERVICIO.por_persona || 2);
+  /* Situación de un día para el horario elegido: lleno, ya pedido por esta persona, tarde, abierto o a tiempo. */
+  const sitDia = (iso) => {
+    if (admin || !ocupacion.cargada) return situacionDia(iso);
+    const o = ocupacion.de(iso, horario);
+    if (o.mio) return {clase: "mio", texto: "ya pediste este día", bloquea: true};
+    if (o.lleno) return {clase: "lleno", texto: "horario ocupado: ya no hay lugar", bloquea: true};
+    const base = situacionDia(iso);
+    return o.quedan <= 2 ? {...base, clase: base.clase === "ok" ? "poco" : base.clase, quedan: `${o.quedan} libres`, texto: base.texto ? `${base.texto}; quedan ${o.quedan}` : `quedan ${o.quedan}`} : base;
+  };
   const salasElegidas = [];
   let horario = "12:15-14:15";
   const errores = {};
@@ -651,11 +688,12 @@ function formularioTicket({admin = false, alPreparar}) {
     h("span", null, "Entiendo que para los días marcados en ámbar o rojo la reserva no está garantizada."));
   const actualizarResumen = () => {
     const l = [...fechas].sort();
-    resumenFechas.textContent = l.length ? `${l.length} día(s): ${l.map((x) => { const t = situacionDia(x).texto; return fechaLarga(x) + (t ? ` (${t})` : ""); }).join(", ")}` : "Toca uno o varios días. Cada día es una solicitud aparte.";
-    riesgo.classList.toggle("oculto", !l.some((x) => situacionDia(x).clase !== "ok"));
+    const cuenta = !admin && ocupacion.cargada ? ` Tienes ${ocupacion.misActivas} de ${limite} solicitudes activas.` : "";
+    resumenFechas.textContent = (l.length ? `${l.length} día(s): ${l.map((x) => { const t = sitDia(x).texto; return fechaLarga(x) + (t ? ` (${t})` : ""); }).join(", ")}.` : "Toca uno o varios días. Cada día es una solicitud aparte.") + cuenta;
+    riesgo.classList.toggle("oculto", !l.some((x) => !["ok", "poco"].includes(sitDia(x).clase)));
     btn.textContent = l.length > 1 ? `Preparar ${l.length} solicitudes` : "Preparar solicitud";
   };
-  const nuevoCal = () => calendario({seleccion: fechas, alCambiar: actualizarResumen, min, max, horario: () => horario, situacion: situacionDia});
+  const nuevoCal = () => calendario({seleccion: fechas, alCambiar: actualizarResumen, min, max, horario: () => horario, situacion: sitDia});
   let cal = nuevoCal();
   errores.fechas = h("div", {class: "error-campo", role: "alert"});
 
@@ -678,6 +716,8 @@ function formularioTicket({admin = false, alPreparar}) {
     if (!/^\d{3,10}$/.test(datos.codigo)) { errores["t-codigo"].textContent = "El código lleva solo números."; ok = false; }
     if (!salasElegidas.length) { errores.salas.textContent = "Elige al menos una sala."; ok = false; }
     if (!fechas.size) { errores.fechas.textContent = "Elige al menos un día en el calendario."; ok = false; }
+    else if (!admin && ocupacion.cargada && ocupacion.misActivas + fechas.size > limite) { errores.fechas.textContent = `Máximo ${limite} solicitudes activas por persona: ya tienes ${ocupacion.misActivas}. Cuando se use una, puedes pedir otra.`; ok = false; }
+    else if (!admin && ocupacion.cargada && [...fechas].some((x) => sitDia(x).bloquea)) { errores.fechas.textContent = "Uno de los días elegidos ya se llenó o ya lo pediste. Quítalo."; ok = false; }
     const salasValidas = salasElegidas.filter((id) => !bloqueada(id, horario));
     if (!salasValidas.length && salasElegidas.length) { errores.salas.textContent = "Esa sala no está disponible en este horario. Elige otra."; ok = false; }
     if (!riesgo.classList.contains("oculto") && !$("#t-riesgo").checked) { errores.fechas.textContent = "Marca que entiendes que esos días no tienen garantía, o quítalos."; ok = false; }
@@ -730,12 +770,16 @@ async function vistaPedir(c) {
     return;
   }
   const resultado = h("div");
+  let abiertos = null;
+  try { abiertos = await api("/issues?state=open&per_page=100"); } catch { /* sin datos: el calendario no cierra nada y el bot aplica el límite igual */ }
+  const ocupacion = ocupacionDe(abiertos);
   c.append(h("div", {class: "fila dos"},
-    caja({tipo: "primary", titulo: "Nueva solicitud", icono: "cal", cuerpo: formularioTicket({alPreparar: (t) => mostrarParaEnviar(resultado, t)})}),
+    caja({tipo: "primary", titulo: "Nueva solicitud", icono: "cal", cuerpo: formularioTicket({ocupacion, alPreparar: (t) => mostrarParaEnviar(resultado, t)})}),
     h("div", null, resultado, cajaPlazos(), caja({tipo: "info", titulo: "Antes de pedir", icono: "info", cuerpo: h("ul", {style: "margin:0;padding-left:18px"},
       h("li", null, "Puedes pedir con semanas de anticipación: el bot lo intenta la noche anterior a cada día."),
       h("li", null, "Tus datos se cifran en este teléfono: en GitHub nadie más puede leerlos y el bot los borra apenas los usa."),
       h("li", null, "Solo salas de estudio. Si tu primera opción ya está tomada, prueba la siguiente."),
+      h("li", null, `Máximo ${Math.max(1, +SERVICIO.por_persona || 2)} solicitudes activas por persona y una por día. Los días rayados ya están llenos.`),
       h("li", null, "Necesitas una cuenta de GitHub para enviar (es gratis). Si no tienes, copia el texto y mándaselo al administrador por WhatsApp."),
       h("li", null, "Sigue tu solicitud en «Estado» con el código de referencia."))}))));
 }
@@ -1060,18 +1104,20 @@ async function vistaAjustes(c) {
         h("label", {class: "check grupo"}, auto, h("span", null, "Aprobar solas las pendientes a partir de la hora indicada")),
         h("div", {class: "dos-col"},
           h("div", {class: "grupo"}, h("label", {for: "a-hora"}, "Hora (Bolivia)"), inp("a-hora", vars.UPB_AUTO_APROBAR_BO || "18:30", {type: "time"})),
-          h("div", {class: "grupo"}, h("label", {for: "a-max"}, "Personas por noche"), inp("a-max", vars.UPB_MAX_PERSONAS || "4", {type: "number", min: 1, max: 8, inputmode: "numeric"}))),
+          h("div", {class: "grupo"}, h("label", {for: "a-max"}, "Personas por noche"), inp("a-max", vars.UPB_MAX_PERSONAS || "4", {type: "number", min: 1, max: 8, inputmode: "numeric"})),
+          h("div", {class: "grupo"}, h("label", {for: "a-porpersona"}, "Solicitudes activas por persona"), inp("a-porpersona", vars.UPB_MAX_POR_PERSONA || "2", {type: "number", min: 1, max: 10, inputmode: "numeric"}))),
         h("div", {class: "ayuda"}, "Te incluye a ti. Cada solicitud corre aparte y más suave que la tuya, para no saturar el sistema de la UPB."))}),
       caja({tipo: "danger", titulo: "Bot", icono: "engranaje", cuerpo: h("label", {class: "check"}, pausa, h("span", null, h("b", null, "Pausar los arranques automáticos"), h("br"), h("span", {class: "ayuda"}, "Para feriados o vacaciones. «Correr bot ahora» sigue funcionando.")))}),
       boton("Guardar cambios", "btn-primary btn-lg btn-block", (e) => accion(e.currentTarget, async () => {
         const hora = $("#a-hora").value || "18:30", max = String(Math.min(8, Math.max(1, +$("#a-max").value || 4)));
+        const porPersona = String(Math.min(10, Math.max(1, +$("#a-porpersona").value || 2)));
         const salasVal = orden.filter((i) => activas.has(i)).join(",");
         if (!salasVal) throw new Error("Deja al menos una sala activa.");
         const cambios = {UPB_NOMBRE: $("#a-nombre").value.trim(), UPB_APELLIDO: $("#a-apellido").value.trim(), UPB_PROPOSITO: $("#a-motivo").value.trim(),
-          UPB_HORARIO: horario, UPB_SALAS: salasVal, UPB_AUTO_APROBAR: auto.checked ? "1" : "0", UPB_AUTO_APROBAR_BO: hora, UPB_MAX_PERSONAS: max, UPB_PAUSADO: pausa.checked ? "1" : "0"};
+          UPB_HORARIO: horario, UPB_SALAS: salasVal, UPB_AUTO_APROBAR: auto.checked ? "1" : "0", UPB_AUTO_APROBAR_BO: hora, UPB_MAX_PERSONAS: max, UPB_MAX_POR_PERSONA: porPersona, UPB_PAUSADO: pausa.checked ? "1" : "0"};
         for (const [k, v] of Object.entries(cambios)) await guardarVariable(k, v, vars);
         vars = await leerVariables();
-        try { await publicarServicio({bloqueo: {sala: salasVal.split(",")[0], horario}, plazo: hora}); }
+        try { await publicarServicio({bloqueo: {sala: salasVal.split(",")[0], horario}, plazo: hora, cupo: Math.max(0, +max - 1), por_persona: +porPersona}); }
         catch (x) { aviso("Ajustes guardados, pero no pude publicar los plazos y el bloqueo en la página pública: " + x.message, "av", 9000); }
         if (cambios.UPB_NOMBRE) guardado.set("nombre_mostrar", `${cambios.UPB_NOMBRE} ${cambios.UPB_APELLIDO}`.trim());
         dibujarMarco("ajustes");

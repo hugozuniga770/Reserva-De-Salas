@@ -1,7 +1,12 @@
 {
-  "bloqueo": {"sala": "8", "horario": "12:15-14:15"},
+  "bloqueo": {
+    "sala": "8",
+    "horario": "12:15-14:15"
+  },
   "inicio": "15:30",
   "plazo": "18:30",
   "apertura": "20:00",
-  "fin": "21:15"
+  "fin": "21:15",
+  "cupo": 3,
+  "por_persona": 2
 }

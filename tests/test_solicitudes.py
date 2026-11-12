@@ -49,10 +49,10 @@ class FuenteFalsa:
         self.comentarios: dict[int, list[str]] = {}
         self.despachados: list[int] = []
 
-    def agregar(self, numero, datos=None, etiquetas=(), crudo=None, fecha=HOY, horario="12:15-14:15"):
+    def agregar(self, numero, datos=None, etiquetas=(), crudo=None, fecha=HOY, horario="12:15-14:15", autor=""):
         token = crudo if crudo is not None else sol.cifrar(datos, PUB)
         self.issues[numero] = sol.Issue(numero, f"{sol.MARCADOR}\n\n{token}", set(etiquetas),
-                                        sol.titulo_ticket(fecha, horario), True)
+                                        sol.titulo_ticket(fecha, horario), True, autor)
 
     def listar(self):
         return [i for i in self.issues.values() if i.abierto]
@@ -571,3 +571,54 @@ def test_resultado_ticket_sin_sala(servidor, salida):
     f.agregar(4, solicitud(salas=("6",), fecha=date(2026, 10, 22)), etiquetas={"aprobada"}, fecha=date(2026, 10, 22))
     ticket(url, f, 4, reloj=lambda: datetime(2026, 10, 22, 15, 0, tzinfo=rb.BO_TZ)).ejecutar()
     assert salida() == "no-se-libero"
+
+
+# ───────────────────────── límite por persona (autor del issue en GitHub) ─────────────────────────
+
+def _iss(n, fecha, autor, abierto=True, etiquetas=()):
+    return sol.Issue(n, sol.MARCADOR, set(etiquetas), sol.titulo_ticket(fecha, "12:15-14:15"), abierto, autor)
+
+
+def test_excedentes_maximo_dos_activas_por_persona_y_una_por_dia():
+    tickets = [_iss(1, "2026-11-13", "ana"), _iss(2, "2026-11-14", "ana"), _iss(3, "2026-11-15", "ana"),   # 3ª sobra
+               _iss(4, "2026-11-13", "luis"), _iss(5, "2026-11-13", "luis"),                                 # repite día
+               _iss(6, "2026-11-13", "hugozuniga770"), _iss(7, "2026-11-14", "hugozuniga770"), _iss(8, "2026-11-15", "hugozuniga770"),  # dueño: sin límite
+               _iss(9, "2026-11-16", "ana", abierto=False)]                                                  # cerrado: no cuenta
+    sobran = sol.excedentes(tickets, 2, {"hugozuniga770"})
+    assert [(t.numero, m.split(";")[0].split(" (")[0]) for t, m in sobran] == [
+        (3, "máximo 2 solicitudes activas por persona"), (5, "ya tienes una solicitud activa para el 2026-11-13")]
+
+
+def test_excedentes_orden_por_numero_el_primero_en_pedir_se_queda():
+    tickets = [_iss(20, "2026-11-20", "ana"), _iss(10, "2026-11-18", "ana"), _iss(15, "2026-11-19", "ana")]
+    assert [t.numero for t, _ in sol.excedentes(tickets, 2)] == [20]
+
+
+def test_excedentes_sin_autor_o_bots_no_se_limitan():
+    tickets = [_iss(1, "2026-11-13", ""), _iss(2, "2026-11-14", ""), _iss(3, "2026-11-15", ""),
+               _iss(4, "2026-11-13", "github-actions[bot]"), _iss(5, "2026-11-14", "github-actions[bot]"), _iss(6, "2026-11-15", "github-actions[bot]")]
+    assert sol.excedentes(tickets, 2) == []
+
+
+def test_tu_corrida_descarta_el_tercer_ticket_de_la_misma_persona_sin_descifrarlo(servidor):
+    """Tres tickets de «ana» para tres días: el tercero se cierra como inválida, con comentario y datos borrados;
+    los dos primeros se lanzan. El bot principal nunca descifra: decide solo por título y autor."""
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(1, solicitud(), etiquetas={"aprobada"}, fecha=HOY, autor="ana")
+    f.agregar(2, solicitud(), etiquetas={"aprobada"}, fecha=HOY, autor="ana")          # mismo día: sobra
+    f.agregar(3, solicitud(), etiquetas={"aprobada"}, fecha=HOY, autor="luis")
+    principal(url, f, max_personas=9).ejecutar()
+    assert f.despachados == [1, 3]
+    assert not f.issues[2].abierto and "invalida" in f.issues[2].etiquetas and f.issues[2].cuerpo == sol.BORRADO
+    assert "ya tienes una solicitud activa" in f.comentarios[2][0]
+    assert f.issues[1].abierto and f.issues[3].abierto
+
+
+def test_tu_corrida_no_tumba_un_ticket_excedente_que_ya_esta_corriendo(servidor):
+    est, url = servidor("normal")
+    f = FuenteFalsa()
+    f.agregar(1, solicitud(), etiquetas={"aprobada", "en-curso"}, fecha=HOY, autor="ana")
+    f.agregar(2, solicitud(), etiquetas={"aprobada", "en-curso"}, fecha=HOY, autor="ana")
+    principal(url, f, max_personas=9).ejecutar()
+    assert f.issues[2].abierto and "invalida" not in f.issues[2].etiquetas

@@ -41,11 +41,20 @@ def ticket(numero, fecha, etiquetas=(), estado="open", ref="ABC234", nombre="Ana
             "labels": [{"name": e} for e in etiquetas], "user": {"login": "ana-upb"}}
 
 
+def refs_propias(pag):
+    """Referencias guardadas en el teléfono simulado (localStorage del panel)."""
+    return [x.get("ref") for x in pag.evaluate('() => JSON.parse(localStorage.getItem("upb_mis_tickets") || "[]")') if x.get("ref")]
+
+
 class GitHubFalso:
     def __init__(self):
         self.issues = {12: ticket(12, "2026-11-06", ("aprobada", "en-curso"), ref="K7X2QF"),
                        13: ticket(13, "2026-11-10", (), ref="M4P9RT", nombre="Luis", codigo="22222", salas=("8",)),
-                       9: ticket(9, "2026-11-03", ("reservada",), estado="closed", ref="Z9Y8W7")}
+                       9: ticket(9, "2026-11-03", ("reservada",), estado="closed", ref="Z9Y8W7"),
+                       # jueves 12: tres solicitudes = cupo de la noche (4 personas con el dueño) → el calendario lo cierra
+                       14: ticket(14, "2026-11-12", ("aprobada",), ref="A1B2C3", nombre="Carla", codigo="33331"),
+                       15: ticket(15, "2026-11-12", (), ref="D4E5F6", nombre="Diego", codigo="33332"),
+                       16: ticket(16, "2026-11-12", (), ref="G7H8J9", nombre="Elena", codigo="33333")}
         self.issues[9]["body"] = sol.BORRADO
         self.comentarios = {9: [{"user": {"login": "github-actions[bot]"}, "body": "✅ Reservado y verificado: Sala de estudio D · 12:15-14:15 · 2026-11-03"}]}
         self.runs = [
@@ -206,6 +215,11 @@ def main():
         assert "cancel" in clase("jue. 5 de noviembre"), "hoy ya está abierto: solo cancelaciones"
         assert "tarde" in clase("vie. 6 de noviembre"), "mañana: pasó el plazo"
         assert "tarde" not in clase("lun. 9 de noviembre") and "cancel" not in clase("lun. 9 de noviembre")
+        # Cupos: el jueves 12 ya tiene 3 solicitudes (cupo lleno) → rayado y deshabilitado; el martes 10 tiene 1 → "quedan 2"
+        assert "lleno" in clase("jue. 12 de noviembre") and pag.is_disabled('button[aria-label^="jue. 12 de noviembre"]'), "día lleno debe cerrarse"
+        assert "poco" in clase("mar. 10 de noviembre") and pag.get_attribute('button[aria-label^="mar. 10 de noviembre"]', "data-quedan") == "2 libres"
+        pag.wait_for_selector("text=Tienes 0 de 2 solicitudes activas")
+        resultados["cupos_en_calendario"] = "OK"
         # Sala F bloqueada solo de 12:15 a 14:15
         f_boton = '.sala-opcion[aria-label^="Sala de estudio F"], .sala-opcion:has-text("Sala F")'
         assert pag.is_disabled(f_boton), "la F de 12:15 debe estar bloqueada"
@@ -242,6 +256,19 @@ def main():
         mias = pag.evaluate("JSON.parse(localStorage.getItem('upb_mis_tickets'))")
         assert all(set(x) == {"ref", "fecha", "horario"} for x in mias), "en el teléfono solo se guardan referencias, no datos"
         pag.screenshot(path=CAPTURAS / "03-pedir-listo.png", full_page=True)
+        # Límite por persona: con el ticket 13 (ref M4P9RT) como propio, el martes 10 queda marcado "tuyo"
+        # y, con 2 refs activas más de esta misma pantalla, pedir un tercer día se rechaza.
+        pag.evaluate("""() => { const m = JSON.parse(localStorage.getItem("upb_mis_tickets") || "[]"); m.push({ref: "M4P9RT", fecha: "2026-11-10", horario: "12:15-14:15"}); localStorage.setItem("upb_mis_tickets", JSON.stringify(m)); }""")
+        gh.issues[20] = ticket(20, "2026-11-09", (), ref=refs_propias(pag)[0] if refs_propias(pag) else "QQQQQQ")
+        pag.goto(base + "#estado"); pag.goto(base + "#pedir"); pag.wait_for_selector("#t-nombre")
+        assert "mio" in clase("mar. 10 de noviembre") and pag.is_disabled('button[aria-label^="mar. 10 de noviembre"]'), "día ya pedido por esta persona"
+        pag.wait_for_selector("text=Tienes 2 de 2 solicitudes activas")
+        pag.fill("#t-nombre", "Ana María"); pag.fill("#t-apellido", "Pérez Soto"); pag.fill("#t-codigo", "81234")
+        pag.click("text=Sala D"); pag.click('button[aria-label^="mié. 11 de noviembre"]'); pag.check("#t-ok")
+        pag.click("text=Preparar solicitud")
+        pag.wait_for_selector("text=Máximo 2 solicitudes activas por persona")
+        resultados["limite_por_persona"] = "OK"
+        del gh.issues[20]
 
         # ── 2. Estado público ──
         pag.evaluate("localStorage.setItem('upb_mis_tickets', JSON.stringify([{ref:'K7X2QF'},{ref:'Z9Y8W7'},{ref:'M4P9RT'}]))")

@@ -143,6 +143,12 @@ class Issue:
     etiquetas: set[str] = field(default_factory=set)
     titulo: str = ""
     abierto: bool = True
+    autor: str = ""          # login de GitHub de quien abrió el ticket (no es un dato personal del formulario)
+
+    @property
+    def horario(self) -> str:
+        m = re.search(r"\b(\d{1,2}:\d{2}-\d{1,2}:\d{2})\b", self.titulo or "")
+        return m.group(1) if m else ""
 
     @property
     def fecha(self) -> date | None:
@@ -155,6 +161,31 @@ class Issue:
 
 
 BORRADO = "Datos borrados por el bot después de usarlos. Este ticket ya no contiene información."
+
+
+def excedentes(tickets: list[Issue], por_persona: int = 2, exentos: set[str] | None = None) -> list[tuple[Issue, str]]:
+    """Tickets que se pasan del límite por persona (función pura, probada).
+
+    Cuenta por autor (login de GitHub) los tickets abiertos ordenados por número. Se quedan los
+    primeros `por_persona`; sobran (a) los que repiten un día que esa persona ya pidió y (b) los que
+    exceden el límite. El administrador (`exentos`) y los tickets sin autor no se limitan.
+    """
+    exentos = {e.lower() for e in (exentos or set())}
+    sobran: list[tuple[Issue, str]] = []
+    vistos: dict[str, list[Issue]] = {}
+    for t in sorted(tickets, key=lambda i: i.numero):
+        a = (t.autor or "").lower()
+        if not t.abierto or not a or a in exentos or a.endswith("[bot]"):
+            continue
+        mios = vistos.setdefault(a, [])
+        if t.fecha and any(m.fecha == t.fecha for m in mios):
+            sobran.append((t, f"ya tienes una solicitud activa para el {t.fecha} (una por día por persona)"))
+            continue
+        if len(mios) >= por_persona:
+            sobran.append((t, f"máximo {por_persona} solicitudes activas por persona; cuando se use o cierres una, vuelve a pedir"))
+            continue
+        mios.append(t)
+    return sobran
 
 
 def titulo_ticket(fecha: date | str, horario: str, ref: str = "") -> str:
@@ -176,7 +207,7 @@ class GitHubIssues:
     @staticmethod
     def _issue(i: dict) -> Issue:
         return Issue(i["number"], i.get("body") or "", {l["name"] for l in i.get("labels", [])},
-                     i.get("title") or "", i.get("state") == "open")
+                     i.get("title") or "", i.get("state") == "open", ((i.get("user") or {}).get("login") or ""))
 
     def listar(self) -> list[Issue]:
         r = self.s.get(f"{self.base}/issues", params={"state": "open", "per_page": 100}, timeout=20)

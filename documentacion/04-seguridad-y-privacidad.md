@@ -36,7 +36,7 @@
 | Que los datos queden guardados tras usarse | La corrida del ticket reemplaza el cuerpo del issue y lo cierra | `cerrar_ticket()` |
 | Que el token del panel caiga en manos de un tercero | Fine-grained token limitado a este repositorio. Se guarda solo en el navegador y nunca se sube | Panel → Conectar |
 | Que la página del panel ejecute contenido malicioso de un issue | Todo el texto se inserta como texto (`textContent`), nunca como HTML | `docs/index.html`, función `h()` |
-| Spam de solicitudes que se auto-aprueban | Tope de personas por noche, una solicitud activa por código y rechazo con un toque | `UPB_MAX_PERSONAS`, panel |
+| Spam de solicitudes que se auto-aprueban | Tope de personas por noche, máximo 2 solicitudes activas por persona (por autor del issue, sin descifrar) y una por día, rechazo con un toque | `UPB_MAX_PERSONAS`, `UPB_MAX_POR_PERSONA`, panel |
 | Saturar el sistema de la UPB | Ritmo fijo y acotado (RNF-01). Tickets más lentos | Constantes en `reserva_bot.py` |
 | Permisos excesivos de la corrida | `permissions:` mínimos: `contents: read`, `issues: write`, `actions: write` | `reservar.yml` |
 

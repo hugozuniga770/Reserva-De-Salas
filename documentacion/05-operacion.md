@@ -17,8 +17,9 @@
 | Hora | Qué pasa |
 | :-- | :-- |
 | 15:30 | El bot se activa: los tickets del día siguiente quedan listos y tu corrida los lanza junto con la tuya |
-| 15:47 · 16:53 · 17:37 · 18:11 · 18:41 | Arranques programados de tu corrida. El primero que GitHub ejecute es el que trabaja; los demás terminan en segundos |
-| 17:05 · 18:05 | Disparos de cron-job.org (si está configurado) |
+| 15:47 · 16:53 · 17:37 · 18:11 · 18:41 | Arranques programados (cron) de tu corrida: **solo respaldo**, GitHub los retrasa entre 3 y 8 h. Si uno llega antes que el relevo, es el que trabaja |
+| 18:45 | **Relevo** (`relevo.yml`): lanza tu corrida por `workflow_dispatch`, que arranca en segundos. Si ya hay una en cola o corriendo (a mano o por cron), no lanza otra. Hora ajustable con la variable `UPB_RELEVO_BO` |
+| 17:05 · 18:05 | Disparos de cron-job.org (opcional; el relevo ya cubre el arranque) |
 | 18:30 | **Plazo para los solicitantes.** Las pendientes se aprueban solas y se lanzan. Después de esta hora se intenta sin garantía |
 | 19:00 | Aviso 🟢 «Bot vigilando». Empieza la banda de 1 consulta por segundo |
 | 19:45–20:15 | Núcleo: ~4 consultas por segundo en tu corrida y 1 por segundo por ticket |
@@ -31,10 +32,10 @@
 | :-- | :-- | :-- |
 | No llega el 🟢 antes de las 19:30 | El bot no está corriendo | Panel → Inicio → «Arrancarlo ahora». Si falla, reserva a mano |
 | Alerta roja en el panel | No hay corrida tuya entre 18:45 y 21:15 | Igual que arriba |
-| ⚠️ «Arrancó tarde» | GitHub lo arrancó después de las 20:00 | Revisa la sala a mano. Configura cron-job.org si se repite |
+| ⚠️ «Arrancó tarde» | GitHub lo arrancó después de las 20:00 | Revisa la sala a mano. Revisa en Actions que el workflow **Relevo** esté corriendo; si no, lánzalo una vez con «Run workflow» |
 | Corrida en rojo con código 2 | El sistema rechazó la reserva 5 veces con el mismo mensaje | Lee el mensaje en el registro. Suele ser un dato mal escrito (código, nombre) |
 | Corrida en rojo con código 3 | No se pudo leer la página en toda la corrida | Revisa si el sitio de la UPB funciona desde tu celular |
-| Corrida en rojo con código 4 | Arrancó después de las 21:15 sin sala | GitHub muy atrasado. Configura cron-job.org |
+| Corrida en rojo con código 4 | Arrancó después de las 21:15 sin sala | Cron atrasado y la cadena de relevos estaba cortada. Lanza **Relevo** una vez con «Run workflow» |
 | Ticket descartado | Datos ilegibles o inválidos (motivo en el comentario) | Pide al estudiante que envíe de nuevo |
 
 ## 3. Qué significa cada resultado
@@ -53,7 +54,7 @@ El panel (Inicio → «Tu última corrida» y «Corridas recientes») muestra c�
 | Prueba OK | `prueba` | Prueba sin reservar | Nada |
 | Solicitud descartada | `descartada` | Datos inválidos o sala no disponible (motivo en el comentario del issue) | Pedir que la envíen de nuevo |
 | Solicitud ya no activa | `inactivo` | El ticket se eliminó, cerró o rechazó antes de su corrida | Nada |
-| Arrancó tarde | `tarde` | GitHub la arrancó después de las 20:00 y no había sala | Configurar cron-job.org |
+| Arrancó tarde | `tarde` | GitHub la arrancó después de las 20:00 y no había sala | Comprobar que el Relevo esté vivo |
 | Con error | `error` | Configuración, rechazo repetido de la UPB, sitio caído o copia no autorizada | Abrir «Ver» y leer el registro |
 
 Las corridas del **05/11 marcadas con «push»** no son corridas reales. GitHub las crea, fallidas, en cada commit mientras el archivo del workflow es inválido; pasó antes de la corrección de la v4.1. El panel las oculta. Si quieres, puedes borrarlas en GitHub → Actions → cada corrida → «Delete workflow run».

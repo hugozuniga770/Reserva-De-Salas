@@ -4,8 +4,8 @@
 | :-- | :-- |
 | Proyecto | Reserva automática de salas de estudio, UPB sede Santa Cruz |
 | Responsable | Hugo Rafael Zúñiga Daza |
-| Versión | 3.4 |
-| Fecha | 07/11/2026 |
+| Versión | 4.5 |
+| Fecha | 12/11/2026 |
 | Estado | En pruebas: verificado contra entornos simulados; falta la verificación en el sistema real (ver §8) |
 | Panel | `https://hugozuniga770.github.io/Reserva-De-Salas/` |
 
@@ -48,7 +48,7 @@ Detalle, diagramas y decisiones: [03 · Arquitectura](documentacion/03-arquitect
 2. **GitHub Pages**: Settings → Pages → rama `main`, carpeta `/docs`.
 3. **Panel**: abre el enlace → *Administrar* → pega tu fine-grained token (permisos: Actions, Variables, Issues y Contents en lectura y escritura; solo este repositorio).
 4. Sigue la **Guía de instalación** del panel. Ahí se crea la llave de cifrado (`UPB_CLAVE_PRIVADA`), se comprueban los permisos y se hace la prueba final.
-5. Recomendado: cron-job.org para un arranque puntual (paso 5 de la guía).
+5. Lanza una vez el workflow **Relevo** (Actions → Relevo → Run workflow). Desde ahí la cadena se mantiene sola y arranca tu corrida a las 18:45 BO en segundos; los cron quedan como respaldo. cron-job.org (paso 5 de la guía) es opcional.
 
 Manual completo: [06 · Manual de usuario](documentacion/06-manual-de-usuario.md).
 

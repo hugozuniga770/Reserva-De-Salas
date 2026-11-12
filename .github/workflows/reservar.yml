@@ -5,9 +5,10 @@ name: Reserva Sala UPB
 run-name: "${{ inputs.ticket && format('Solicitud #{0}', inputs.ticket) || ((inputs.dry_run == true || inputs.dry_run == 'true') && 'Prueba sin reservar' || 'Tu reserva') }}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TU CORRIDA (sin "ticket"): arranca con cualquiera de estos 5 horarios (GitHub los
-# retrasa a veces horas, por eso son varios), espera sola hasta la apertura de las
-# 20:00 BO y termina a las 21:15 BO. Además lanza la corrida AISLADA de cada ticket.
+# TU CORRIDA (sin "ticket"): la lanza el RELEVO (relevo.yml) a las 18:45 BO por
+# workflow_dispatch, que arranca en segundos. Estos 5 cron son solo respaldo: GitHub
+# los retrasa horas. Espera sola hasta la apertura de las 20:00 BO y termina a las
+# 21:15 BO. Además lanza la corrida AISLADA de cada ticket aprobado.
 #
 # CORRIDA DE TICKET (input "ticket"): una por solicitud, en su propio carril, en
 # paralelo con la tuya. Solo conoce los datos de ESA persona; al terminar los borra.
@@ -42,6 +43,10 @@ on:
         description: 'Prueba sin reservar'
         type: boolean
         default: false
+      origen:
+        description: 'Quién lanza (vacío = a mano; "relevo" = relevo.yml, respeta la pausa)'
+        required: false
+        default: ''
 
 # Carriles: TU corrida usa uno solo (nunca dos tuyas a la vez, y nunca se mata una
 # que está enviando). Cada TICKET tiene su propio carril → corren en paralelo.
@@ -58,8 +63,8 @@ permissions:
 jobs:
   reservar:
     # Candado: solo corre en el repositorio original (ver LICENSE). En copias no hace nada.
-    # "Pausar" desde el panel solo frena los automáticos; "Correr bot ahora" siempre funciona.
-    if: github.repository == 'hugozuniga770/Reserva-De-Salas' && (github.event_name != 'schedule' || vars.UPB_PAUSADO != '1')
+    # "Pausar" desde el panel frena los automáticos (cron y relevo); "Correr bot ahora" siempre funciona.
+    if: github.repository == 'hugozuniga770/Reserva-De-Salas' && ((github.event_name != 'schedule' && inputs.origen != 'relevo') || vars.UPB_PAUSADO != '1')
     runs-on: ubuntu-latest
     timeout-minutes: 355        # GitHub corta a los 360
     steps:

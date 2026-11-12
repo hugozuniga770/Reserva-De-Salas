@@ -1,0 +1,42 @@
+name: Relevo
+
+run-name: "Relevo (lanza «Tu reserva» a las ${{ vars.UPB_RELEVO_BO || '18:45' }} BO)"
+
+# Cadena de corridas que nunca se corta (ver relevo.py). Cada relevo lanza al siguiente
+# antes de morir; el que está despierto a la hora objetivo lanza «Tu reserva» por
+# workflow_dispatch, que arranca en segundos (los cron de GitHub llegan horas tarde).
+# Los cron de aquí solo reencienden la cadena si se cortó: el grupo de concurrencia
+# deja como máximo un relevo corriendo y uno en cola, así nunca hay dos cadenas.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '13 2,8,14,20 * * *'
+
+concurrency:
+  group: relevo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  relevo:
+    if: github.repository == 'hugozuniga770/Reserva-De-Salas'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Relevo
+        env:
+          UPB_GH_TOKEN:       ${{ github.token }}
+          UPB_REPO:           ${{ github.repository }}
+          UPB_RELEVO_BO:      ${{ vars.UPB_RELEVO_BO || '18:45' }}
+          UPB_HASTA_BO:       '21:15'
+          UPB_RELEVO_MINUTOS: '335'
+        run: python relevo.py

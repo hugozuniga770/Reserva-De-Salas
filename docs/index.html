@@ -995,22 +995,38 @@ async function vistaTickets(c) {
     "Cada solicitud corre en su propia corrida, aislada de las demás y de la tuya. Las pendientes se aprueban solas a la hora de auto-aprobación (Ajustes). Al terminar, el bot borra los datos del ticket.")),
     caja({tipo: "primary", titulo: "Abiertas", icono: "lista", der: boton("", "btn-default btn-sm", () => cargar(), "recargar", {"aria-label": "Actualizar"}), cuerpo: lista}),
     agregar);
-  agregar.append(caja({tipo: "success", titulo: "Agregar una solicitud", icono: "usuarios", cuerpo: h("div", null,
-    h("p", {class: "ayuda", style: "margin-top:0"}, "Para pedidos que te llegan por WhatsApp. Se crean ya aprobadas."),
-    formularioTicket({admin: true, alPreparar: async (ts) => { for (const t of ts) await api("/issues", {metodo: "POST", cuerpo: {title: t.titulo, body: t.cuerpo, labels: ["aprobada"]}}); aviso(`${ts.length} solicitud(es) creada(s).`, "ok"); cargar(); }}),
-    h("hr", {style: "border:0;border-top:1px solid var(--linea);margin:18px 0"}),
-    (() => { const ta = h("textarea", {class: "control", placeholder: "Pega aquí el texto «UPB|…» que te enviaron"});
-      return h("div", {class: "grupo"}, h("label", null, "Pegar texto de WhatsApp"), ta, h("div", {style: "margin-top:8px"}, boton("Crear desde el texto", "btn-default", (e) => accion(e.currentTarget, async () => {
-        const lineas = ta.value.split(/\n/).map((x) => x.trim()).filter((x) => x.startsWith("UPB|"));
-        if (!lineas.length) throw new Error("No encontré líneas que empiecen con «UPB|».");
-        for (const l of lineas) {
-          const [, fecha, hor, ref, token, letras] = l.split("|");
-          if (!UPBCifrado.PATRON.test(token || "")) throw new Error("Una de las líneas está incompleta: pide que la copien de nuevo.");
-          const ids = String(letras || "").split(",").map((x) => (SALAS.find((s) => s.l === x.trim()) || {}).id).filter(Boolean);
-          await api("/issues", {metodo: "POST", cuerpo: {title: tituloTicket(fecha, hor, ref, ids), body: `${MARCADOR}\nSolicitud cifrada recibida por WhatsApp.\n\n${token}\n`, labels: ["aprobada"]}});
-        }
-        ta.value = ""; aviso(`${lineas.length} solicitud(es) creada(s).`, "ok"); cargar();
-      }), "enviar"))); })())}));
+  /* Pegar de WhatsApp: lo más fácil para quien no quiere usar GitHub. Se crea como PENDIENTE (igual que una
+     enviada desde la página): la apruebas con un toque o se aprueba sola a la hora de auto-aprobación. */
+  const ta = h("textarea", {class: "control", id: "wsp-texto", rows: 4, placeholder: "Pega aquí todo el mensaje que te mandaron (puede venir con fecha, nombre y otras líneas: solo se usan las que empiezan con UPB|)"});
+  const aprobarYa = h("input", {type: "checkbox", id: "wsp-aprobar"});
+  const resultadoWsp = h("div");
+  const crearDesdeTexto = async () => {
+    const lineas = [...new Set((ta.value.match(/UPB\|\S+/g) || []))];
+    if (!lineas.length) throw new Error("No encontré ninguna solicitud. Pide que toquen «Copiar para WhatsApp» en la página y te manden ese texto completo.");
+    const creadas = [];
+    for (const l of lineas) {
+      const [, fecha, hor, ref, token, letras] = l.split("|");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || "") || !HORARIOS.includes(hor || "") || !UPBCifrado.PATRON.test(token || "")) throw new Error(`Una de las líneas está incompleta o cortada (ref ${ref || "?"}): pide que la copien de nuevo.`);
+      const ids = String(letras || "").split(",").map((x) => (SALAS.find((s) => s.l === x.trim()) || {}).id).filter(Boolean);
+      const r = await api("/issues", {metodo: "POST", cuerpo: {title: tituloTicket(fecha, hor, ref, ids), body: `${MARCADOR}\nSolicitud cifrada recibida por WhatsApp.\n\n${token}\n`, labels: aprobarYa.checked ? ["aprobada"] : []}});
+      creadas.push({n: r.number, fecha, hor, ref});
+    }
+    ta.value = "";
+    resultadoWsp.replaceChildren(h("div", {class: "alerta alerta-ok"}, svg("check"), h("div", null,
+      h("b", null, `${creadas.length} solicitud(es) creada(s)${aprobarYa.checked ? " y aprobada(s)" : " como pendientes"}. `),
+      aprobarYa.checked ? "Se lanzarán con tu corrida." : `Apruébalas en la lista o se aprueban solas a las ${SERVICIO.plazo}. `,
+      "Quien te la mandó la ve en «Estado» con su referencia: ", creadas.map((x) => h("b", {class: "mono", style: "display:inline;margin-right:6px"}, x.ref)))));
+    cargar();
+  };
+  agregar.append(caja({tipo: "success", titulo: "Pegar de WhatsApp", icono: "copiar", cuerpo: h("div", null,
+    h("p", {class: "ayuda", style: "margin-top:0"}, "Para quien no quiere entrar a GitHub: en la página pública prepara su solicitud, toca «Copiar para WhatsApp» y te lo manda. Tú lo pegas aquí y listo: entra igual que una enviada por GitHub, con sus datos cifrados."),
+    h("div", {class: "grupo"}, ta),
+    h("label", {class: "check grupo"}, aprobarYa, h("span", null, "Aprobar de una (si no, queda pendiente y la apruebas tú o se aprueba sola a la hora de auto-aprobación)")),
+    boton("Crear solicitud(es)", "btn-success btn-lg btn-block", (e) => accion(e.currentTarget, crearDesdeTexto), "enviar"),
+    resultadoWsp)}));
+  agregar.append(caja({tipo: "default", titulo: "Cargar a mano", icono: "usuarios", cuerpo: h("div", null,
+    h("p", {class: "ayuda", style: "margin-top:0"}, "Si te dictan los datos por teléfono o en persona. Se crean ya aprobadas."),
+    formularioTicket({admin: true, alPreparar: async (ts) => { for (const t of ts) await api("/issues", {metodo: "POST", cuerpo: {title: t.titulo, body: t.cuerpo, labels: ["aprobada"]}}); aviso(`${ts.length} solicitud(es) creada(s).`, "ok"); cargar(); }}))}));
 
   async function cargar() {
     lista.replaceChildren(h("div", {class: "vacio"}, "Cargando…"));
@@ -1186,17 +1202,15 @@ async function vistaGuia(c) {
       secreto),
     paso(4, "primary", "Secrets de GitHub", h("span"),
       h("p", null, "En ", h("a", {href: `${repoUrl}/settings/secrets/actions`, target: "_blank", rel: "noopener"}, "Settings → Secrets → Actions"), " deben existir: UPB_CODIGO (tu código), UPB_NOMBRE, UPB_APELLIDO, UPB_CLAVE_PRIVADA (paso 3) y, si quieres avisos, NTFY_TOPIC.")),
-    paso(5, "info", "Arranque puntual con cron-job.org", h("span"),
-      h("p", null, "Los horarios automáticos de GitHub a veces se retrasan horas. Un disparo externo a las 17:05 y 18:05 (zona America/La_Paz) lo evita. En cron-job.org crea un trabajo con:"),
-      h("div", {class: "etiqueta"}, "URL (método POST)"), linea(`https://api.github.com/repos/${repo()}/actions/workflows/${WF}/dispatches`),
-      h("div", {class: "etiqueta"}, "Encabezados"), linea("Authorization: Bearer github_pat_…"), linea("Accept: application/vnd.github+json"), linea("X-GitHub-Api-Version: 2022-11-28"),
-      h("div", {class: "etiqueta"}, "Cuerpo"), linea('{"ref":"main"}'),
-      h("p", {class: "ayuda"}, "Para cron-job.org conviene un token aparte con solo el permiso Actions. Prueba con «Test run»: debe responder 204.")),
+    paso(5, "info", "Arranque puntual (Relevo)", h("span"),
+      h("p", null, "Los horarios automáticos de GitHub se retrasan horas. Desde v4.5 el workflow ", h("b", null, "Relevo"), " mantiene una corrida siempre viva que lanza tu reserva a las 18:45 en segundos. Solo tienes que comprobar en ", h("a", {href: `${repoUrl}/actions`, target: "_blank", rel: "noopener"}, "Actions"), " que haya una corrida «Relevo» en curso; si no la hay, ábrela y toca «Run workflow» una vez."),
+      h("p", {class: "ayuda"}, "Opcional: un disparo externo desde cron-job.org (POST a ", linea(`https://api.github.com/repos/${repo()}/actions/workflows/${WF}/dispatches`), " con un token que solo tenga el permiso Actions) sirve como segundo respaldo.")),
     paso(6, "info", "Avisos al celular (ntfy)", h("span"),
       h("p", null, "Instala la app ntfy, suscríbete a tu canal y ponlo en el Secret NTFY_TOPIC. Recibirás: 🟢 vigilando (desde las 19:00), ✅ reservado, ⚠️ arrancó tarde y ❌ sin sala. Si a las 19:30 no te llegó el 🟢, el bot no está corriendo: arráncalo desde Inicio.")),
     paso(7, "success", "Compartir la página de solicitudes", h("span"),
       h("p", null, "Pasa este enlace a tus compañeros. No necesitan token; sus datos van cifrados."),
-      linea(`${location.origin}${location.pathname}#pedir`)),
+      linea(`${location.origin}${location.pathname}#pedir`),
+      h("p", null, h("b", null, "Si alguien no quiere entrar a GitHub: "), "que prepare su solicitud en esa página, toque «Copiar para WhatsApp» y te mande el texto. Tú lo pegas en ", h("a", {href: "#tickets"}, "Solicitudes → Pegar de WhatsApp"), " y queda creada como pendiente, igual que las demás: la apruebas con un toque o se aprueba sola a la hora de auto-aprobación. Sus datos viajan cifrados también por WhatsApp.")),
     paso(8, "success", "Prueba final", h("span"),
       h("p", null, "Lanza una corrida que revisa todo sin reservar nada."),
       boton("Probar sin reservar", "btn-success", (e) => accion(e.currentTarget, async () => { await despachar({dry_run: "true"}); aviso("Prueba lanzada. Mírala en Inicio → Corridas recientes.", "ok"); }), "matraz")));

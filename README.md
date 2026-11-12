@@ -4,7 +4,7 @@
 | :-- | :-- |
 | Proyecto | Reserva automática de salas de estudio, UPB sede Santa Cruz |
 | Responsable | Hugo Rafael Zúñiga Daza |
-| Versión | 4.7 |
+| Versión | 4.8 |
 | Fecha | 12/11/2026 |
 | Estado | En pruebas: verificado contra entornos simulados; falta la verificación en el sistema real (ver §8) |
 | Panel | `https://hugozuniga770.github.io/Reserva-De-Salas/` |

@@ -341,6 +341,21 @@ def main():
         assert ("POST", f"/repos/{REPO}/actions/runs/501/cancel") in gh.llamadas
         resultados["acciones_admin"] = "OK"
 
+        # Pegar de WhatsApp: texto con ruido (hora, nombre, línea de título) → se crea PENDIENTE, con salas en el título
+        tok = sol.cifrar({"v": 1, "nombre": "Rosa", "apellido": "Quispe", "codigo": "44444", "proposito": "Estudio", "horario": "12:15-14:15",
+                          "salas": ["15", "3"], "fecha": "2026-11-13", "ntfy": ""}, PUB)
+        antes = set(gh.issues)
+        pag.fill("#wsp-texto", f"[10:32, 12/11/2026] Rosa: Solicitudes de sala (cifradas):\nUPB|2026-11-13|12:15-14:15|R0S4QP|{tok}|B,C\n")
+        pag.click("text=Crear solicitud(es)")
+        pag.wait_for_selector("text=1 solicitud(es) creada(s) como pendientes")
+        nuevo = gh.issues[max(set(gh.issues) - antes)]
+        assert "salas B,C" in nuevo["title"] and "ref R0S4QP" in nuevo["title"] and nuevo["labels"] == [], nuevo
+        assert sol.descifrar(nuevo["body"], CLAVE)["codigo"] == "44444"
+        pag.fill("#wsp-texto", "hola, quiero sala")
+        pag.click("text=Crear solicitud(es)")
+        pag.wait_for_selector("text=No encontré ninguna solicitud")
+        resultados["pegar_whatsapp"] = "OK"
+
         pag.goto(base + "#ajustes")
         pag.wait_for_selector("#a-nombre")
         pag.screenshot(path=CAPTURAS / "07-ajustes.png", full_page=True)

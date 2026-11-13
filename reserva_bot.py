@@ -60,6 +60,7 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass, field
@@ -67,6 +68,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
 import requests
+from requests.adapters import HTTPAdapter
 
 VERSION = "2.0"
 URL_DEFECTO = "https://atari.scz.upb.edu/student_reservation.php"
@@ -168,10 +170,12 @@ class Config:
     # primera sala SIN esperar a leer la página con el cambio de día. Medido el 12/11/2026: otro
     # estudiante tomó la F dentro del mismo segundo de la apertura; leer-y-luego-enviar llega tarde.
     disparo: bool = True
-    disparo_anticipo: float = 0.2     # s antes de la hora de apertura (compensa el viaje del paquete)
+    disparo_anticipo: float = 0.4     # s antes de la hora de apertura en que sale el primer envío
     disparo_segundos: float = 2.5     # ventana total del disparo
-    disparo_intervalo: float = 0.1    # pausa entre envíos dentro de la ventana
+    disparo_intervalo: float = 0.1    # un envío cada 0,1 s, EN PARALELO (no espera la respuesta del anterior)
     disparo_maximo: int = 20          # envíos como máximo: no es un bombardeo
+    disparo_calentar: float = 3.0     # s antes: abre las conexiones para no pagar el saludo TLS en la apertura
+    disparo_conexiones: int = 8       # conexiones abiertas de antemano
     intervalo_espera: float = 30.0    # cuando ya no hay nada que hacer hasta la banda
     pausa_verificacion: float = 2.0
     apertura_bo: str = "20:00"
@@ -423,39 +427,138 @@ class Bot:
 
     def en_ventana_disparo(self, ahora: datetime) -> bool:
         ap = self.proxima_apertura(ahora)
-        return ap - timedelta(seconds=self.cfg.disparo_anticipo) <= ahora <= ap + timedelta(seconds=self.cfg.disparo_segundos)
+        antes = self.cfg.disparo_anticipo + self.cfg.disparo_calentar
+        return ap - timedelta(seconds=antes) <= ahora <= ap + timedelta(seconds=self.cfg.disparo_segundos)
 
     def segundos_hasta_disparo(self, ahora: datetime) -> float:
-        return (self.proxima_apertura(ahora) - timedelta(seconds=self.cfg.disparo_anticipo) - ahora).total_seconds()
+        antes = self.cfg.disparo_anticipo + self.cfg.disparo_calentar
+        return (self.proxima_apertura(ahora) - timedelta(seconds=antes) - ahora).total_seconds()
 
     def disparo_apertura(self, per: Persona, p: Pagina) -> Intento | None:
-        """Disparo de apertura: envía la reserva de tu PRIMERA sala cada ~0,1 s durante la apertura,
-        sin esperar a leer la página con el día nuevo (leer y luego enviar tarda ~0,5 s desde GitHub,
-        y el 12/11/2026 otro estudiante tomó la F dentro de ese mismo segundo). Son como mucho
-        `disparo_maximo` envíos en `disparo_segundos` s: una ráfaga corta, no un bombardeo.
-        Antes de que el servidor cambie de día el envío simplemente se rechaza y se repite; si lo
-        acepta, la verificación en el calendario manda, como siempre. Si responde «ocupado», otro
-        llegó antes: se corta y el bucle normal sigue con las demás salas."""
+        """Disparo de apertura: gana la carrera del primer segundo.
+
+        El 12/11/2026 el bot detectó el cambio de día a las 20:00:00 y envió, pero otro estudiante ya
+        tenía la F en esa misma lectura. Leer → ver → enviar desde GitHub (EE. UU.) cuesta ~0,5 s. Aquí:
+          1. ~3 s antes abre `disparo_conexiones` conexiones (el saludo TLS ya está pagado).
+          2. Desde `disparo_anticipo` s antes de la hora sale un envío de tu PRIMERA sala cada
+             `disparo_intervalo` s, EN PARALELO: ninguno espera la respuesta del anterior, así que
+             siempre hay un paquete llegando al servidor cada 0,1 s alrededor del instante de apertura.
+          3. Cada respuesta trae la página: si el servidor sigue en el día viejo, el rechazo solo
+             significa «todavía no abre»; si ya cambió y aparece tu nombre, está confirmada.
+        Son como mucho `disparo_maximo` envíos en ~2 s: una ráfaga corta, no un bombardeo. Se deja de
+        enviar en cuanto una respuesta trae el día nuevo con éxito u «ocupado». Al final SIEMPRE se
+        verifica en el calendario, que es la única verdad. Devuelve el Intento confirmado, uno
+        rechazado («ocupado»: otro llegó antes; el bucle normal sigue con las demás salas) o None."""
         cfg = self.cfg
         sala = per.salas[0]
         nombre = p.salas.get(sala, f"sala {sala}")
-        log(f"🎯 Apertura: envío la reserva de {nombre} {per.horario} sin esperar a ver el cambio de día "
-            f"(hasta {cfg.disparo_maximo} envíos en {cfg.disparo_segundos:.1f} s).")
-        limite = time.monotonic() + cfg.disparo_segundos
-        enviados = 0
-        ultimo: Intento | None = None
-        while enviados < cfg.disparo_maximo and time.monotonic() < limite:
-            enviados += 1
-            ultimo = self.intentar(p, sala, per, a_ciegas=True)
-            if ultimo.estado == "confirmada":
-                log(f"🎯 {nombre} confirmada en el envío {enviados}.")
-                return ultimo
-            if ultimo.estado == "rechazada" and "ocupad" in ultimo.mensaje.lower() and "todavía no abre" not in ultimo.mensaje:
-                log(f"🎯 {nombre}: otro llegó antes (envío {enviados}). Sigo con las demás salas.")
-                return ultimo
-            cfg.dormir(cfg.disparo_intervalo)
-        log(f"🎯 Disparo terminado sin confirmación tras {enviados} envíos; sigo con el bucle normal.")
-        return ultimo
+        datos = {"room": sala, "first_name": per.nombre, "last_name": per.apellido,
+                 "code": per.codigo, "schedule": per.horario, "purpose": per.proposito}
+        sesion = requests.Session()
+        sesion.headers.update(self.sesion.headers)
+        adaptador = HTTPAdapter(pool_connections=1, pool_maxsize=cfg.disparo_conexiones + 2)
+        sesion.mount("https://", adaptador)
+        sesion.mount("http://", adaptador)
+
+        # 1. Calentar conexiones (en paralelo, para que queden todas abiertas en el pool).
+        def calentar():
+            try:
+                sesion.get(cfg.url, timeout=max(1.0, cfg.disparo_calentar - 0.4))
+            except requests.RequestException:
+                pass
+        hilos = [threading.Thread(target=calentar, daemon=True) for _ in range(cfg.disparo_conexiones)]
+        for h in hilos:
+            h.start()
+        for h in hilos:
+            h.join(timeout=cfg.disparo_calentar)
+
+        # 2. Esperar el instante exacto del primer envío.
+        ahora = cfg.reloj()
+        falta = (self.proxima_apertura(ahora) - timedelta(seconds=cfg.disparo_anticipo) - ahora).total_seconds()
+        if falta > 0:
+            time.sleep(falta)
+        log(f"🎯 Apertura: {nombre} {per.horario}, un envío cada {cfg.disparo_intervalo:.2f} s en paralelo "
+            f"(máx. {cfg.disparo_maximo}), primero {cfg.disparo_anticipo:.1f} s antes de la hora.")
+
+        candado = threading.Lock()
+        parar = threading.Event()
+        hallazgos: list[tuple[int, str, object, object]] = []   # (n, tipo, evento, pagina)
+
+        def enviar(n: int) -> None:
+            t0 = time.monotonic()
+            try:
+                r = sesion.post(cfg.url, data=datos, timeout=30, headers={"Referer": cfg.url})
+                alertas = leer_alertas(r.text)
+                try:
+                    q = parsear(r.text)
+                except PaginaInvalida:
+                    q = None
+            except requests.RequestException:
+                with candado:
+                    hallazgos.append((n, "red", None, None))
+                return
+            ms = (time.monotonic() - t0) * 1000
+            if q is None or q.hoy is None or (p.hoy is not None and q.hoy <= p.hoy):
+                tipo, ev = "aun-no", None                     # el servidor sigue en el día viejo
+            else:
+                ev = mi_reserva(q, per)
+                rechazo = next((m for t, m in alertas if t in ("danger", "warning")), "")
+                if ev:
+                    tipo = "confirmada"
+                elif any(t == "success" for t, _ in alertas):
+                    tipo = "exito"
+                elif "ocupad" in rechazo.lower():
+                    tipo = "ocupado"
+                else:
+                    tipo = "otro"
+                if tipo in ("confirmada", "exito", "ocupado"):
+                    parar.set()                               # ya abrió y hay veredicto: no enviar más
+            with candado:
+                hallazgos.append((n, tipo, ev, q))
+            log(f"🎯 envío {n}: {tipo} ({ms:.0f} ms)")
+
+        # 3. Ráfaga escalonada: un hilo cada `disparo_intervalo`, sin esperar respuestas.
+        inicio = time.monotonic()
+        lanzados: list[threading.Thread] = []
+        for n in range(1, cfg.disparo_maximo + 1):
+            espera = inicio + (n - 1) * cfg.disparo_intervalo - time.monotonic()
+            if espera > 0 and parar.wait(espera):
+                break
+            if parar.is_set():
+                break
+            h = threading.Thread(target=enviar, args=(n,), daemon=True)
+            h.start()
+            lanzados.append(h)
+        for h in lanzados:
+            h.join(timeout=35)
+        sesion.close()
+
+        # 4. Veredicto. Un «ocupado» puede ser por tu propio envío anterior: el calendario decide.
+        with candado:
+            vistos = sorted(hallazgos)
+        confirmada = next((x for x in vistos if x[1] == "confirmada"), None)
+        if confirmada:
+            log(f"🎯 {nombre} confirmada en el envío {confirmada[0]} de {len(lanzados)}.")
+            return Intento("confirmada", evento=confirmada[2], pagina=confirmada[3])
+        abrio = any(x[1] in ("exito", "ocupado", "otro") for x in vistos)
+        hubo_exito = any(x[1] in ("exito", "red") for x in vistos)
+        if abrio or hubo_exito:
+            for k in range(8 if hubo_exito else 2):
+                if k:
+                    cfg.dormir(cfg.pausa_verificacion)
+                try:
+                    q = self.obtener()
+                except (requests.RequestException, PaginaInvalida):
+                    continue
+                ev = mi_reserva(q, per)
+                if ev:
+                    log(f"🎯 {nombre} confirmada en el calendario tras la ráfaga ({len(lanzados)} envíos).")
+                    return Intento("confirmada", evento=ev, pagina=q)
+        if any(x[1] == "ocupado" for x in vistos):
+            log(f"🎯 {nombre}: otro llegó antes ({len(lanzados)} envíos). Sigo con las demás salas.")
+            return Intento("rechazada", "Ese horario ya está ocupado.", pagina=p)
+        log(f"🎯 Disparo terminado sin veredicto tras {len(lanzados)} envíos; sigo con el bucle normal.")
+        return None
 
     def en_banda_apertura(self, ahora: datetime) -> bool:
         ap = self.proxima_apertura(ahora)
@@ -480,9 +583,7 @@ class Bot:
         return min(techo, intervalo * 2 ** min(errores_seguidos, 5))
 
     # -- reserva --
-    def intentar(self, p: Pagina, sala: str, per: Persona, a_ciegas: bool = False) -> Intento:
-        """Envía la reserva y la verifica en el calendario. Con a_ciegas=True (disparo de apertura)
-        no se asume que la sala esté libre y un rechazo vuelve de inmediato, sin releer la página."""
+    def intentar(self, p: Pagina, sala: str, per: Persona) -> Intento:
         cfg = self.cfg
         quien = "" if per.es_duenio else f"[{per.etiqueta}] "
         nombre_sala = p.salas.get(sala, f"sala {sala}")
@@ -490,8 +591,7 @@ class Bot:
             log(f"{quien}[DRY-RUN] {nombre_sala} {per.horario} está libre: aquí enviaría la reserva.")
             return Intento("dry_run", pagina=p)
 
-        if not a_ciegas:
-            log(f"{quien}¡{nombre_sala} {per.horario} libre! Enviando reserva…")
+        log(f"{quien}¡{nombre_sala} {per.horario} libre! Enviando reserva…")
         datos = {"room": sala, "first_name": per.nombre, "last_name": per.apellido,
                  "code": per.codigo, "schedule": per.horario, "purpose": per.proposito}
         alertas: list[tuple[str, str]] = []
@@ -507,24 +607,8 @@ class Bot:
         dijo_exito = any(t == "success" for t, _ in alertas)
         rechazo = next((msg for t, msg in alertas if t in ("danger", "warning")), "")
 
-        if a_ciegas and not fallo_red:
-            # La respuesta al envío es la página completa: sirve para saber si el servidor ya cambió de
-            # día (si no, cualquier rechazo —incluido «ocupado», que se refiere al día viejo— solo
-            # significa «todavía no abre») y, si ya cambió, como primera verificación sin otra lectura.
-            try:
-                q = parsear(r.text)
-            except PaginaInvalida:
-                q = None
-            if q is not None and q.hoy is not None and p.hoy is not None and q.hoy <= p.hoy:
-                return Intento("rechazada", "todavía no abre (el servidor sigue en el día anterior)", pagina=p)
-            if q is not None:
-                ev = mi_reserva(q, per)
-                if ev:
-                    log(f"  verificación 0/8: CONFIRMADA en la misma respuesta → {ev.get('title')}")
-                    return Intento("confirmada", evento=ev, pagina=q)
-
         # Verificación: la única fuente de verdad es el calendario del servidor.
-        intentos = 8 if (dijo_exito or fallo_red) else (0 if a_ciegas else 3)
+        intentos = 8 if (dijo_exito or fallo_red) else 3
         ultima = p
         for k in range(intentos):
             if k:
@@ -1055,7 +1139,7 @@ def main() -> int:
     bot.sala_duenio = (os.getenv("UPB_SALA_DUENIO", "") or (cfg.salas[0] if cfg.salas else "")).strip()
     cfg.disparo = os.getenv("UPB_DISPARO", "1").strip() not in ("0", "false", "no")
     try:
-        cfg.disparo_anticipo = max(0.0, min(1.0, int(os.getenv("UPB_DISPARO_MS", "200")) / 1000))
+        cfg.disparo_anticipo = max(0.0, min(1.5, int(os.getenv("UPB_DISPARO_MS", "400")) / 1000))
     except ValueError:
         pass
     return bot.ejecutar()

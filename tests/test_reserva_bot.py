@@ -84,6 +84,8 @@ def crear_handler(est: Estado):
             pass
 
         def _enviar(self, cuerpo, codigo=200):
+            if getattr(est, "latencia", 0) and self.command == "POST":
+                time.sleep(est.latencia)                     # la respuesta tarda en volver (GitHub → Bolivia)
             datos = cuerpo.encode()
             self.send_response(codigo)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -122,6 +124,8 @@ def crear_handler(est: Estado):
         def do_POST(self):
             largo = int(self.headers.get("Content-Length", 0))
             f = {k: v[0] for k, v in parse_qs(self.rfile.read(largo).decode()).items()}
+            if getattr(est, "llegadas", None) is not None:
+                est.llegadas.append(est.reloj())            # instante en que el envío LLEGA al servidor
             with est.lock:
                 self._dia_por_reloj()
                 est.posts.append(f)
@@ -623,33 +627,54 @@ def reloj_que_avanza(inicio: datetime):
     return lambda: inicio + timedelta(seconds=time.monotonic() - t0)
 
 
+APERTURA = datetime(2026, 10, 23, 20, 0, 0, tzinfo=rb.BO_TZ)
+RAPIDO = dict(disparo_calentar=0.6, disparo_conexiones=4, disparo_anticipo=0.4, disparo_intervalo=0.1)
+
+
 def test_disparo_envia_la_primera_sala_sin_esperar_a_leer_el_cambio_de_dia(servidor):
-    """A las 19:59:59,8 empieza a enviar la reserva de la F cada 0,1 s. El servidor rechaza hasta que
-    cambia de día (a las 20:00:00,4) y entonces la acepta: la F queda confirmada sin una sola lectura
-    intermedia de la página y antes de que el bucle normal vea el día nuevo."""
+    """Los envíos de la F salen desde 0,4 s antes de las 20:00, uno cada 0,1 s. El servidor rechaza hasta
+    que cambia de día (20:00:00,35) y entonces acepta: la F queda confirmada con la respuesta del propio
+    envío, antes de que el bucle normal lea el día nuevo."""
     est, url = servidor("normal")
     est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")   # ya tiene la de hoy
-    inicio = datetime(2026, 10, 23, 19, 59, 58, 500000, tzinfo=rb.BO_TZ)
-    reloj = reloj_que_avanza(inicio)
-    est.cambia_dia_cuando = lambda: reloj() >= datetime(2026, 10, 23, 20, 0, 0, 400000, tzinfo=rb.BO_TZ)
-    bot = rb.Bot(config(url, reloj=reloj, max_segundos=6, salas=["8", "6"], disparo_anticipo=0.2,
-                        disparo_segundos=2.5, disparo_intervalo=0.1))
+    reloj = reloj_que_avanza(APERTURA - timedelta(seconds=2))
+    est.cambia_dia_cuando = lambda: reloj() >= APERTURA + timedelta(seconds=0.35)
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=8, salas=["8", "6"], **RAPIDO))
     assert bot.ejecutar() == 0
     assert est.hoy == date(2026, 10, 24)
     assert any(e["title"].endswith("Sala de estudio F") and e["start"].startswith("2026-10-24") for e in est.eventos)
     rechazos = [p for p in est.posts if p.get("_rechazado_por_dia")]
-    assert len(est.posts) >= 3 and len(rechazos) >= 1, "debió insistir antes del cambio de día"
+    assert len(rechazos) >= 3, "debió insistir antes del cambio de día"
+    assert len(est.posts) <= 21, "la ráfaga tiene tope"
     assert any("confirmada con el disparo de apertura" in l for l in bot.resumen)
+
+
+def test_disparo_es_en_paralelo_no_espera_la_respuesta_del_envio_anterior(servidor):
+    """Con un servidor que tarda 0,5 s en responder (como GitHub → Bolivia), los envíos igual LLEGAN cada
+    ~0,1 s. En serie llegaría uno cada 0,6 s y el primero tras la apertura podría tardar medio segundo."""
+    est, url = servidor("normal")
+    est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")
+    reloj = reloj_que_avanza(APERTURA - timedelta(seconds=2))
+    cambio = APERTURA + timedelta(seconds=0.25)
+    est.cambia_dia_cuando = lambda: reloj() >= cambio
+    est.latencia, est.reloj, est.llegadas = 0.5, reloj, []
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=10, salas=["8", "6"], **RAPIDO))
+    assert bot.ejecutar() == 0
+    antes = [t for t in est.llegadas if t < cambio]
+    despues = [t for t in est.llegadas if t >= cambio]
+    assert len(antes) >= 4, f"llegaron {len(antes)} envíos antes del cambio; en serie habría 1 o 2"
+    assert despues and (despues[0] - cambio).total_seconds() <= 0.2, "el primer envío tras la apertura llegó tarde"
+    assert any(e["title"].startswith("Hugo") and e["title"].endswith("Sala de estudio F")
+               and e["start"].startswith("2026-10-24") for e in est.eventos)
 
 
 def test_disparo_si_otro_gana_la_f_sigue_con_la_d(servidor):
     est, url = servidor("normal")
     est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")
-    inicio = datetime(2026, 10, 23, 19, 59, 59, 0, tzinfo=rb.BO_TZ)
-    reloj = reloj_que_avanza(inicio)
-    est.cambia_dia_cuando = lambda: reloj() >= datetime(2026, 10, 23, 20, 0, 0, 200000, tzinfo=rb.BO_TZ)
+    reloj = reloj_que_avanza(APERTURA - timedelta(seconds=2))
+    est.cambia_dia_cuando = lambda: reloj() >= APERTURA + timedelta(seconds=0.2)
     est.al_cambiar_dia = lambda: est.reservar("ari m", "8", "12:15-14:15")   # un bot local gana la F al instante
-    bot = rb.Bot(config(url, reloj=reloj, max_segundos=6, salas=["8", "6"], disparo_intervalo=0.1))
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=8, salas=["8", "6"], **RAPIDO))
     assert bot.ejecutar() == 0
     assert any(e["title"].endswith("Sala de estudio D") and e["title"].startswith("Hugo") for e in est.eventos)
     assert not any(e["title"].startswith("Hugo") and e["title"].endswith("Sala de estudio F")
@@ -657,16 +682,14 @@ def test_disparo_si_otro_gana_la_f_sigue_con_la_d(servidor):
     assert len(est.posts) <= 25, "la ráfaga tiene tope"
 
 
-def test_disparo_no_aplica_a_tickets_ni_dry_run_ni_desactivado(servidor):
+def test_disparo_no_aplica_a_dry_run_ni_desactivado(servidor):
     est, url = servidor("normal")
-    inicio = datetime(2026, 10, 23, 19, 59, 59, 500000, tzinfo=rb.BO_TZ)
-    reloj = reloj_que_avanza(inicio)
-    est.cambia_dia_cuando = lambda: reloj() >= datetime(2026, 10, 23, 20, 0, 0, 300000, tzinfo=rb.BO_TZ)
-    bot = rb.Bot(config(url, reloj=reloj, max_segundos=3, salas=["8"], disparo=False))
-    bot.ejecutar()
+    reloj = reloj_que_avanza(APERTURA - timedelta(seconds=1.5))
+    est.cambia_dia_cuando = lambda: reloj() >= APERTURA + timedelta(seconds=0.3)
+    rb.Bot(config(url, reloj=reloj, max_segundos=3, salas=["8"], disparo=False, **RAPIDO)).ejecutar()
     assert not any(p.get("_rechazado_por_dia") for p in est.posts), "sin disparo no se envía antes del cambio de día"
     est2, url2 = servidor("normal")
-    reloj2 = reloj_que_avanza(inicio)
-    est2.cambia_dia_cuando = lambda: reloj2() >= datetime(2026, 10, 23, 20, 0, 0, 300000, tzinfo=rb.BO_TZ)
-    rb.Bot(config(url2, reloj=reloj2, max_segundos=3, salas=["8"], dry_run=True)).ejecutar()
+    reloj2 = reloj_que_avanza(APERTURA - timedelta(seconds=1.5))
+    est2.cambia_dia_cuando = lambda: reloj2() >= APERTURA + timedelta(seconds=0.3)
+    rb.Bot(config(url2, reloj=reloj2, max_segundos=3, salas=["8"], dry_run=True, **RAPIDO)).ejecutar()
     assert est2.posts == []

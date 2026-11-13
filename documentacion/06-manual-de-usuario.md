@@ -81,6 +81,7 @@ La **barra superior** siempre muestra el estado del bot (● Vigilando, En cola,
   - **Quitar y borrar datos**: la cierra y borra lo cifrado.
   - **Agregar una solicitud** o **Pegar texto de WhatsApp**: para pedidos que te llegan por chat. Se crean ya aprobadas.
 - **Solicitudes → Pegar de WhatsApp**: para quien no quiere usar GitHub. Esa persona prepara su solicitud en la página pública, toca «Copiar para WhatsApp» y te manda el texto; tú lo pegas entero y queda creada como pendiente (o aprobada, si marcas la casilla). Sus datos viajan cifrados también por WhatsApp; la persona sigue el estado con su referencia.
+- **Ajustes → Horarios**: puedes marcar varios bloques (por ejemplo 10:00–12:00 y 12:15–14:15). El bot reserva tu primera sala en cada uno a la vez; si en alguno te la ganan, ese bloque sigue con tus demás salas. Marca solo los que vayas a ocupar: cada bloque es una sala que nadie más podrá usar.
 - **Ajustes**: nombre, apellido, motivo, horario, orden de salas, auto-aprobación (on/off y hora), personas por noche, solicitudes activas por persona (2 por defecto, y una por día) y pausa. Al guardar, la página pública se actualiza sola: tu primera sala en tu horario aparece como «no disponible» y la hora de auto-aprobación es el plazo que ven los solicitantes. Esto crea un commit: después corre `git pull` en tu PC antes de subir algo.
 
 ### B.3 Varios teléfonos

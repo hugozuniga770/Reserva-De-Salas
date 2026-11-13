@@ -89,6 +89,7 @@ jobs:
           UPB_SALAS:     ${{ (inputs.ticket == '' && inputs.salas) || vars.UPB_SALAS || '8,6,15,3' }}
           UPB_SALAS_ASIGNADAS: ${{ inputs.ticket != '' && inputs.salas || '' }}
           UPB_HORARIO:   ${{ inputs.horario || vars.UPB_HORARIO || '12:15-14:15' }}
+          UPB_HORARIOS:  ${{ inputs.horario || vars.UPB_HORARIOS || '' }}
           UPB_DRY_RUN:   "${{ (inputs.dry_run == true || inputs.dry_run == 'true') && '1' || '0' }}"
           UPB_APERTURA_BO: '20:00'
           UPB_HASTA_BO:    ${{ inputs.minutos == '' && '21:15' || '' }}   # termina a las 21:15 BO

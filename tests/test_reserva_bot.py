@@ -131,7 +131,7 @@ def crear_handler(est: Estado):
                 est.posts.append(f)
                 nombre = f"{f['first_name']} {f['last_name']}"
                 sala, slot = f["room"], f["schedule"]
-                if getattr(est, "cambia_dia_cuando", None) and slot == "12:15-14:15":
+                if getattr(est, "cambia_dia_cuando", None) and slot in getattr(est, "rechaza_antes_del_cambio", {"12:15-14:15"}):
                     # como el sitio real: antes del cambio de día, el horario de «hoy» ya pasó y no se puede reservar
                     # (el mensaje real puede ser este o «ya está ocupado» por la reserva de ayer: el bot no debe fiarse del texto)
                     f["_rechazado_por_dia"] = True
@@ -693,3 +693,52 @@ def test_disparo_no_aplica_a_dry_run_ni_desactivado(servidor):
     est2.cambia_dia_cuando = lambda: reloj2() >= APERTURA + timedelta(seconds=0.3)
     rb.Bot(config(url2, reloj=reloj2, max_segundos=3, salas=["8"], dry_run=True, **RAPIDO)).ejecutar()
     assert est2.posts == []
+
+
+# ───────────────────────── varios bloques tuyos (UPB_HORARIOS) ─────────────────────────
+
+def test_upb_horarios_acepta_varios_bloques_y_respalda_en_upb_horario(monkeypatch):
+    for k, v in {"UPB_NOMBRE": "Hugo", "UPB_APELLIDO": "Zúñiga", "UPB_CODIGO": "95503"}.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("UPB_HORARIOS", "10:00-12:00, 12:15-14:15;10:00-12:00")
+    cfg = rb.Config.desde_entorno()
+    assert cfg.horarios_duenio == ["10:00-12:00", "12:15-14:15"] and cfg.horario == "10:00-12:00"
+    monkeypatch.setenv("UPB_HORARIOS", "")
+    monkeypatch.setenv("UPB_HORARIO", "14:30-16:30")
+    cfg = rb.Config.desde_entorno()
+    assert cfg.horarios_duenio == ["14:30-16:30"] and cfg.horario == "14:30-16:30"
+
+
+def test_dos_bloques_se_reservan_los_dos_en_la_apertura_cada_uno_con_su_rafaga(servidor):
+    """10:00-12:00 y 12:15-14:15 en la F: las dos ráfagas salen a la vez y las dos quedan confirmadas."""
+    est, url = servidor("normal")
+    reloj = reloj_que_avanza(APERTURA - timedelta(seconds=2))
+    est.cambia_dia_cuando = lambda: reloj() >= APERTURA + timedelta(seconds=0.3)
+    est.rechaza_antes_del_cambio = {"10:00-12:00", "12:15-14:15"}
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=10, salas=["8", "6"], horario="10:00-12:00",
+                        horarios_duenio=["10:00-12:00", "12:15-14:15"], **RAPIDO))
+    assert bot.ejecutar() == 0
+    mios = sorted(e["extendedProps"]["slot"] for e in est.eventos
+                  if e["title"].startswith("Hugo") and e["start"].startswith("2026-10-24") and e["title"].endswith("Sala de estudio F"))
+    assert mios == ["10:00-12:00", "12:15-14:15"], est.eventos
+    assert sum("confirmada con el disparo de apertura" in l for l in bot.resumen) == 2
+    assert len(est.posts) <= 45, "tope total de la ráfaga con dos bloques"
+
+
+def test_dos_bloques_si_uno_lo_gana_otro_ese_bloque_sigue_con_la_d_y_el_otro_queda_en_la_f(servidor):
+    est, url = servidor("normal")
+    reloj = reloj_que_avanza(APERTURA - timedelta(seconds=2))
+    est.cambia_dia_cuando = lambda: reloj() >= APERTURA + timedelta(seconds=0.2)
+    est.rechaza_antes_del_cambio = {"10:00-12:00", "12:15-14:15"}
+    est.al_cambiar_dia = lambda: est.reservar("ari m", "8", "12:15-14:15")
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=10, salas=["8", "6"], horario="10:00-12:00",
+                        horarios_duenio=["10:00-12:00", "12:15-14:15"], **RAPIDO))
+    assert bot.ejecutar() == 0
+    mios = {e["extendedProps"]["slot"]: e["extendedProps"]["room"] for e in est.eventos
+            if e["title"].startswith("Hugo") and e["start"].startswith("2026-10-24")}
+    assert mios == {"10:00-12:00": "Sala de estudio F", "12:15-14:15": "Sala de estudio D"}, mios
+
+
+def test_un_ticket_no_puede_pedir_tu_sala_en_ninguno_de_tus_bloques():
+    cfg = config("http://x", horario="10:00-12:00", horarios_duenio=["10:00-12:00", "12:15-14:15"])
+    assert "12:15-14:15" in (cfg.horarios_duenio or [])

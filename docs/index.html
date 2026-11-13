@@ -375,7 +375,8 @@ function situacionDia(iso) {
   if (iso === proximoDia() && plazoVencidoHoy()) return {clase: "tarde", texto: "pasó el plazo: sin garantía"};
   return {clase: "ok", texto: ""};
 }
-const bloqueada = (salaId, horario) => !!SERVICIO.bloqueo && SERVICIO.bloqueo.sala === String(salaId) && SERVICIO.bloqueo.horario === horario;
+const horariosBloqueo = () => (SERVICIO.bloqueo && (SERVICIO.bloqueo.horarios && SERVICIO.bloqueo.horarios.length ? SERVICIO.bloqueo.horarios : [SERVICIO.bloqueo.horario])) || [];
+const bloqueada = (salaId, horario) => !!SERVICIO.bloqueo && SERVICIO.bloqueo.sala === String(salaId) && horariosBloqueo().includes(horario);
 function llegoTarde(creadoIso, fecha) {
   if (!creadoIso || !fecha) return false;
   return new Date(creadoIso) > new Date(`${sumarDias(fecha, -1)}T${String(SERVICIO.plazo).padStart(5, "0")}:00-04:00`);
@@ -683,7 +684,7 @@ function formularioTicket({admin = false, alPreparar, ocupacion = ocupacionDe(nu
   const notaBloqueo = h("div", {class: "ayuda"});
   const pintarSalas = () => salasCaja.replaceChildren(...SALAS.map((s) => {
     const nb = sala(SERVICIO.bloqueo.sala);
-    notaBloqueo.textContent = nb && SERVICIO.bloqueo.horario === horario ? `La ${nb.n} no está disponible de ${fmtH(horario)} (reservada por el servicio).` : "";
+    notaBloqueo.textContent = nb && horariosBloqueo().includes(horario) ? `La ${nb.n} no está disponible de ${fmtH(horario)} (reservada por el servicio).` : "";
     if (bloqueada(s.id, horario)) return h("button", {type: "button", class: "sala-opcion", disabled: true, "aria-label": `${s.n}: no disponible en este horario`},
       tecla(s.id), h("span", {class: "bloq"}, s.n.replace("Sala de estudio ", "Sala "), h("small", {class: "nodisp"}, "No disponible a esta hora")));
     const pos = salasElegidas.indexOf(s.id);
@@ -824,7 +825,7 @@ function cajaPlazos() {
     h("li", null, h("b", null, `Plazo: hasta las ${SERVICIO.plazo} del día anterior. `), "Así tu solicitud entra segura en la corrida de la apertura."),
     h("li", null, h("b", null, `Después de las ${SERVICIO.plazo}: `), "se intenta, pero sin garantía."),
     h("li", null, h("b", null, `Después de las ${SERVICIO.apertura}: `), "ese día ya abrió. No se asegura la reserva del día siguiente: solo se buscan cancelaciones."),
-    s ? h("li", null, h("b", null, `${s.n} de ${fmtH(b.horario)}: `), "no disponible (reservada por el servicio).") : null)});
+    s ? h("li", null, h("b", null, `${s.n} de ${horariosBloqueo().map(fmtH).join(" y ")}: `), "no disponible (reservada por el servicio).") : null)});
 }
 function mostrarParaEnviar(destino, tickets) {
   const mias = guardado.json("mis_tickets", []);
@@ -943,7 +944,7 @@ async function vistaInicio(c) {
         cuadro({color: pausado ? "gris" : bot.color, titulo: pausado ? "En pausa" : bot.titulo, texto: pausado ? "Automáticos detenidos" : bot.texto, icono: "play",
           pie: bot.run ? "Ver registro" : null, alPie: () => bot.run && window.open(bot.run.html_url, "_blank")}),
         cuadro({color: "amarillo", titulo: String(tickets.length), texto: pend ? `Solicitudes · ${pend} sin revisar` : "Solicitudes abiertas", icono: "usuarios", pie: "Revisar", alPie: () => (location.hash = "#tickets")}),
-        cuadro({color: "morado", titulo: salasTxt, texto: `Tu horario: ${fmtH(vars.UPB_HORARIO || "12:15-14:15")}`, icono: "cal", pie: "Cambiar", alPie: () => (location.hash = "#ajustes")}))].filter(Boolean));
+        cuadro({color: "morado", titulo: salasTxt, texto: ((hs) => `Tu${hs.length > 1 ? "s" : ""} horario${hs.length > 1 ? "s" : ""}: ${hs.map(fmtH).join(" y ")}`)((vars.UPB_HORARIOS || vars.UPB_HORARIO || "12:15-14:15").split(",").filter(Boolean)), icono: "cal", pie: "Cambiar", alPie: () => (location.hash = "#ajustes")}))].filter(Boolean));
     const ultima = runs.find((r) => esTuya(r) && !activa(r) && (r.display_title || "") === "Tu reserva" && r.conclusion !== "cancelled");
     if (ultima) {
       const [texto, col] = await resultadoDe(ultima);
@@ -1106,13 +1107,22 @@ async function vistaAjustes(c) {
   encabezado("Ajustes", "Tu reserva y el bot", ["Inicio", "Ajustes"]);
   let vars;
   try { vars = await leerVariables(); } catch (e) { c.append(h("div", {class: "alerta alerta-mal"}, svg("alerta"), h("div", null, e.message))); return; }
-  let horario = vars.UPB_HORARIO || "12:15-14:15";
+  /* Tus horarios: uno o varios bloques (UPB_HORARIOS). Toca para marcar o desmarcar; siempre queda al menos uno. */
+  const horarios = new Set((vars.UPB_HORARIOS || vars.UPB_HORARIO || "12:15-14:15").split(",").map((x) => x.trim()).filter((x) => HORARIOS.includes(x)));
+  if (!horarios.size) horarios.add("12:15-14:15");
+  const notaHorarios = h("p", {class: "ayuda", id: "a-horarios-nota"});
   const elegidas = (vars.UPB_SALAS || "8,6,15,3").split(",").filter((i) => sala(i));
   const orden = [...elegidas, ...SALAS.map((s) => s.id).filter((i) => !elegidas.includes(i))];
   const activas = new Set(elegidas);
   const inp = (id, val, attrs = {}) => h("input", {class: "control", id, value: val || "", ...attrs});
   const chips = h("div", {class: "chips"});
-  const pintarChips = () => chips.replaceChildren(...HORARIOS.map((x) => h("button", {type: "button", class: "chip", "aria-pressed": x === horario ? "true" : "false", onclick: () => { horario = x; pintarChips(); }}, fmtH(x))));
+  const pintarChips = () => {
+    chips.replaceChildren(...HORARIOS.map((x) => h("button", {type: "button", class: "chip", "aria-pressed": horarios.has(x) ? "true" : "false",
+      onclick: () => { if (horarios.has(x)) { if (horarios.size > 1) horarios.delete(x); else aviso("Deja al menos un horario.", "av"); } else horarios.add(x); pintarChips(); }}, fmtH(x))));
+    const n = horarios.size;
+    notaHorarios.textContent = n === 1 ? "Puedes marcar varios: el bot reserva tu primera sala en cada uno a la vez."
+      : `${n} bloques: el bot reserva tu primera sala en cada uno, todos en la apertura. Cada bloque extra es una sala que nadie más podrá usar: marca solo los que vayas a ocupar.`;
+  };
   pintarChips();
   const ol = h("ol", {class: "lista-orden"});
   const pintarOrden = () => ol.replaceChildren(...orden.map((id, i) => h("li", {class: activas.has(id) ? "" : "apagada"},
@@ -1130,7 +1140,7 @@ async function vistaAjustes(c) {
           h("div", {class: "grupo"}, h("label", {for: "a-apellido"}, "Apellido(s)"), inp("a-apellido", vars.UPB_APELLIDO, {placeholder: "el de tus Secrets"}))),
         h("div", {class: "ayuda", style: "margin:-8px 0 12px"}, "Vacío = usa los de tus Secrets."),
         h("div", {class: "grupo"}, h("label", {for: "a-motivo"}, "Detalle de la actividad"), inp("a-motivo", vars.UPB_PROPOSITO, {placeholder: "Estudio académico", maxlength: 120})),
-        h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Horario"), chips),
+        h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Horarios (puedes marcar varios)"), chips, notaHorarios),
         h("div", {class: "grupo"}, h("span", {class: "etiqueta"}, "Salas en orden de preferencia"), ol, h("div", {class: "ayuda"}, "La primera, en tu horario, queda bloqueada para las solicitudes de otros (se muestra como «reservada por el servicio»).")),
         h("p", {class: "ayuda"}, "Tu código de estudiante está en los Secrets de GitHub. ", h("a", {href: `https://github.com/${repo()}/settings/secrets/actions`, target: "_blank", rel: "noopener"}, "Cambiar código")))})),
     h("div", null,
@@ -1147,11 +1157,12 @@ async function vistaAjustes(c) {
         const porPersona = String(Math.min(10, Math.max(1, +$("#a-porpersona").value || 2)));
         const salasVal = orden.filter((i) => activas.has(i)).join(",");
         if (!salasVal) throw new Error("Deja al menos una sala activa.");
+        const horariosVal = HORARIOS.filter((x) => horarios.has(x));
         const cambios = {UPB_NOMBRE: $("#a-nombre").value.trim(), UPB_APELLIDO: $("#a-apellido").value.trim(), UPB_PROPOSITO: $("#a-motivo").value.trim(),
-          UPB_HORARIO: horario, UPB_SALAS: salasVal, UPB_AUTO_APROBAR: auto.checked ? "1" : "0", UPB_AUTO_APROBAR_BO: hora, UPB_MAX_PERSONAS: max, UPB_MAX_POR_PERSONA: porPersona, UPB_PAUSADO: pausa.checked ? "1" : "0"};
+          UPB_HORARIO: horariosVal[0], UPB_HORARIOS: horariosVal.join(","), UPB_SALAS: salasVal, UPB_AUTO_APROBAR: auto.checked ? "1" : "0", UPB_AUTO_APROBAR_BO: hora, UPB_MAX_PERSONAS: max, UPB_MAX_POR_PERSONA: porPersona, UPB_PAUSADO: pausa.checked ? "1" : "0"};
         for (const [k, v] of Object.entries(cambios)) await guardarVariable(k, v, vars);
         vars = await leerVariables();
-        try { await publicarServicio({bloqueo: {sala: salasVal.split(",")[0], horario}, plazo: hora, cupo: Math.max(0, +max - 1), por_persona: +porPersona}); }
+        try { await publicarServicio({bloqueo: {sala: salasVal.split(",")[0], horario: horariosVal[0], horarios: horariosVal}, plazo: hora, cupo: Math.max(0, +max - 1), por_persona: +porPersona}); }
         catch (x) { aviso("Ajustes guardados, pero no pude publicar los plazos y el bloqueo en la página pública: " + x.message, "av", 9000); }
         if (cambios.UPB_NOMBRE) guardado.set("nombre_mostrar", `${cambios.UPB_NOMBRE} ${cambios.UPB_APELLIDO}`.trim());
         dibujarMarco("ajustes");

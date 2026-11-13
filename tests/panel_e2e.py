@@ -365,10 +365,21 @@ def main():
         pag.click("text=Guardar cambios")
         pag.wait_for_selector("text=Cambios guardados")
         v = gh.variables
-        assert v["UPB_HORARIO"] == "10:00-12:00" and v["UPB_PROPOSITO"] == "Proyecto de software" and v["UPB_PAUSADO"] == "1", v
+        # Selección múltiple: al tocar 10:00 se SUMA al 12:15 que ya estaba (dos bloques tuyos)
+        assert v["UPB_HORARIOS"] == "10:00-12:00,12:15-14:15" and v["UPB_HORARIO"] == "10:00-12:00", v
+        assert v["UPB_PROPOSITO"] == "Proyecto de software" and v["UPB_PAUSADO"] == "1", v
         assert v["UPB_SALAS"] == "8,6,15,3", v
-        pub = json.loads(gh.contenido["servicio.json"])  # el bloqueo público sigue a tus ajustes
-        assert pub["bloqueo"] == {"sala": "8", "horario": "10:00-12:00"} and pub["plazo"] == "18:30", pub
+        pub = json.loads(gh.contenido["servicio.json"])  # el bloqueo público sigue a tus ajustes: la F queda fuera en tus dos bloques
+        assert pub["bloqueo"] == {"sala": "8", "horario": "10:00-12:00", "horarios": ["10:00-12:00", "12:15-14:15"]} and pub["plazo"] == "18:30", pub
+        # Desmarcar uno deja el otro; el último no se puede quitar
+        pag.goto(base + "#ajustes"); pag.wait_for_selector("#a-nombre")
+        pag.wait_for_selector("text=2 bloques")
+        pag.click(".chips >> text=12:15 – 14:15")
+        pag.click(".chips >> text=10:00 – 12:00")          # era el último: no se quita
+        assert pag.get_attribute('.chips >> text=10:00 – 12:00', "aria-pressed") == "true"
+        pag.click(".chips >> text=12:15 – 14:15")          # lo vuelvo a marcar para dejar los dos
+        pag.click("text=Guardar cambios"); pag.wait_for_selector("text=Cambios guardados")
+        assert gh.variables["UPB_HORARIOS"] == "10:00-12:00,12:15-14:15", gh.variables
         assert "Hugo" not in gh.contenido["servicio.json"] and "95503" not in gh.contenido["servicio.json"]
         resultados["ajustes"] = "OK"
 

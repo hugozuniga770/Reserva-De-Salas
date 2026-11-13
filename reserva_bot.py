@@ -159,7 +159,7 @@ class Config:
     apellido: str
     codigo: str
     salas: list[str]
-    horario: str
+    horario: str                                # tu bloque principal (el primero de horarios_duenio)
     proposito: str = "Estudio académico"
     url: str = URL_DEFECTO
     max_segundos: float = 340 * 60
@@ -169,6 +169,7 @@ class Config:
     # Disparo de apertura (solo tu corrida): en los segundos de la apertura envía la reserva de tu
     # primera sala SIN esperar a leer la página con el cambio de día. Medido el 12/11/2026: otro
     # estudiante tomó la F dentro del mismo segundo de la apertura; leer-y-luego-enviar llega tarde.
+    horarios_duenio: list[str] | None = None    # todos tus bloques (UPB_HORARIOS); None → solo `horario`
     disparo: bool = True
     disparo_anticipo: float = 0.4     # s antes de la hora de apertura en que sale el primer envío
     disparo_segundos: float = 2.5     # ventana total del disparo
@@ -219,12 +220,24 @@ class Config:
             raise ValueError("UPB_HASTA_BO debe tener formato HH:MM (o vacío)")
         if not re.fullmatch(r"\d{1,2}:\d{2}", os.getenv("UPB_AUTO_APROBAR_BO", "18:30").strip() or "18:30"):
             raise ValueError("UPB_AUTO_APROBAR_BO debe tener formato HH:MM")
+        # UPB_HORARIOS: uno o varios bloques tuyos (coma o punto y coma), p. ej. "10:00-12:00,12:15-14:15".
+        # Respaldo: UPB_HORARIO (un solo bloque). El primero es el principal.
+        crudo = os.getenv("UPB_HORARIOS", "").strip() or os.getenv("UPB_HORARIO", "12:15-14:15")
+        horarios_duenio: list[str] = []
+        for parte in re.split(r"[;,]", crudo):
+            if parte.strip():
+                h = normalizar_horario(parte)
+                if h not in horarios_duenio:
+                    horarios_duenio.append(h)
+        if not horarios_duenio:
+            raise ValueError("UPB_HORARIOS/UPB_HORARIO no tiene ningún horario válido")
         return cls(
             nombre=os.environ["UPB_NOMBRE"].strip(),
             apellido=os.environ["UPB_APELLIDO"].strip(),
             codigo=os.environ["UPB_CODIGO"].strip(),
             salas=salas,
-            horario=normalizar_horario(os.getenv("UPB_HORARIO", "12:15-14:15")),
+            horario=horarios_duenio[0],
+            horarios_duenio=horarios_duenio,
             proposito=os.getenv("UPB_PROPOSITO", "Estudio académico").strip() or "Estudio académico",
             url=os.getenv("UPB_URL", URL_DEFECTO).strip(),
             max_segundos=float(os.getenv("UPB_MAX_MINUTOS", "340") or "340") * 60,
@@ -434,7 +447,8 @@ class Bot:
         antes = self.cfg.disparo_anticipo + self.cfg.disparo_calentar
         return (self.proxima_apertura(ahora) - timedelta(seconds=antes) - ahora).total_seconds()
 
-    def disparo_apertura(self, per: Persona, p: Pagina) -> Intento | None:
+    def disparo_apertura(self, per: Persona, p: Pagina, maximo: int | None = None,
+                         conexiones: int | None = None) -> Intento | None:
         """Disparo de apertura: gana la carrera del primer segundo.
 
         El 12/11/2026 el bot detectó el cambio de día a las 20:00:00 y envió, pero otro estudiante ya
@@ -450,13 +464,15 @@ class Bot:
         verifica en el calendario, que es la única verdad. Devuelve el Intento confirmado, uno
         rechazado («ocupado»: otro llegó antes; el bucle normal sigue con las demás salas) o None."""
         cfg = self.cfg
+        maximo = maximo or cfg.disparo_maximo
+        conexiones = conexiones or cfg.disparo_conexiones
         sala = per.salas[0]
         nombre = p.salas.get(sala, f"sala {sala}")
         datos = {"room": sala, "first_name": per.nombre, "last_name": per.apellido,
                  "code": per.codigo, "schedule": per.horario, "purpose": per.proposito}
         sesion = requests.Session()
         sesion.headers.update(self.sesion.headers)
-        adaptador = HTTPAdapter(pool_connections=1, pool_maxsize=cfg.disparo_conexiones + 2)
+        adaptador = HTTPAdapter(pool_connections=1, pool_maxsize=conexiones + 2)
         sesion.mount("https://", adaptador)
         sesion.mount("http://", adaptador)
 
@@ -466,7 +482,7 @@ class Bot:
                 sesion.get(cfg.url, timeout=max(1.0, cfg.disparo_calentar - 0.4))
             except requests.RequestException:
                 pass
-        hilos = [threading.Thread(target=calentar, daemon=True) for _ in range(cfg.disparo_conexiones)]
+        hilos = [threading.Thread(target=calentar, daemon=True) for _ in range(conexiones)]
         for h in hilos:
             h.start()
         for h in hilos:
@@ -478,7 +494,7 @@ class Bot:
         if falta > 0:
             time.sleep(falta)
         log(f"🎯 Apertura: {nombre} {per.horario}, un envío cada {cfg.disparo_intervalo:.2f} s en paralelo "
-            f"(máx. {cfg.disparo_maximo}), primero {cfg.disparo_anticipo:.1f} s antes de la hora.")
+            f"(máx. {maximo}), primero {cfg.disparo_anticipo:.1f} s antes de la hora.")
 
         candado = threading.Lock()
         parar = threading.Event()
@@ -515,12 +531,12 @@ class Bot:
                     parar.set()                               # ya abrió y hay veredicto: no enviar más
             with candado:
                 hallazgos.append((n, tipo, ev, q))
-            log(f"🎯 envío {n}: {tipo} ({ms:.0f} ms)")
+            log(f"🎯 {per.horario} envío {n}: {tipo} ({ms:.0f} ms)")
 
         # 3. Ráfaga escalonada: un hilo cada `disparo_intervalo`, sin esperar respuestas.
         inicio = time.monotonic()
         lanzados: list[threading.Thread] = []
-        for n in range(1, cfg.disparo_maximo + 1):
+        for n in range(1, maximo + 1):
             espera = inicio + (n - 1) * cfg.disparo_intervalo - time.monotonic()
             if espera > 0 and parar.wait(espera):
                 break
@@ -774,7 +790,8 @@ class Bot:
             self.descartar_ticket(n, "usa el mismo código que la reserva principal")
             return None
         # La sala y el horario del servicio no están disponibles para solicitudes (sin nombrar a nadie).
-        if self.sala_duenio and datos["horario"] == self.cfg.horario and self.sala_duenio in datos["salas"]:
+        if self.sala_duenio and datos["horario"] in (self.cfg.horarios_duenio or [self.cfg.horario]) \
+                and self.sala_duenio in datos["salas"]:
             datos["salas"] = [x for x in datos["salas"] if x != self.sala_duenio]
             nombre_sala = p.salas.get(self.sala_duenio, "esa sala")
             if not datos["salas"]:
@@ -894,15 +911,23 @@ class Bot:
         if hasta is not None:
             segundos = min(segundos, max(0.0, (hasta - ahora0).total_seconds()))
         fin = time.monotonic() + segundos
-        log(f"Bot v{VERSION} | {cfg.nombre} {cfg.apellido} ({cfg.codigo_oculto}) | horario {cfg.horario} | "
+        horarios = cfg.horarios_duenio or [cfg.horario]
+        log(f"Bot v{VERSION} | {cfg.nombre} {cfg.apellido} ({cfg.codigo_oculto}) | "
+            f"horario{'s' if len(horarios) > 1 else ''} {', '.join(horarios)} | "
             f"salas {cfg.salas} | {'DRY-RUN' if cfg.dry_run else 'real'} | arranqué {ahora0:%H:%M} BO, "
             f"termino {(ahora0 + timedelta(seconds=segundos)):%H:%M} BO | "
             + (f"corrida AISLADA del ticket #{self.ticket}" if self.ticket else
                f"tickets {'activos' if self.fuente and self.clave else 'desactivados'}"))
-        duenio = Persona(nombre=cfg.nombre, apellido=cfg.apellido, codigo=cfg.codigo, salas=list(cfg.salas),
-                         horario=cfg.horario, proposito=cfg.proposito, etiqueta="tú", es_duenio=True)
-        # En una corrida de ticket la única persona es la del ticket (se arma tras leer la página).
-        self.personas = [] if self.ticket else [duenio]
+        # Tus bloques (uno o varios, p. ej. 10:00-12:00 y 12:15-14:15): una "persona" por bloque, con tu
+        # mismo nombre y código y tu orden de salas. El primero es el principal para la lógica de tiempos
+        # (todos abren a la misma hora). El resultado de la corrida se decide sobre todos.
+        self.duenios = [Persona(nombre=cfg.nombre, apellido=cfg.apellido, codigo=cfg.codigo, salas=list(cfg.salas),
+                                horario=h, proposito=cfg.proposito,
+                                etiqueta="tú" if i == 0 else f"tú · {h}", es_duenio=True)
+                        for i, h in enumerate(horarios)]
+        duenio = self.duenios[0]
+        objetivos = [] if self.ticket else list(self.duenios)
+        self.personas = [] if self.ticket else list(self.duenios)
         tarde = (not cfg.dry_run) and bool(cfg.hasta_bo) and not self.ticket \
             and ahora0 > self.apertura_de_hoy(ahora0) + timedelta(minutes=2)
         aviso_tarde_hecho = False
@@ -925,16 +950,30 @@ class Bot:
             consultas += 1
             ahora = cfg.reloj()
             # Disparo de apertura: antes de leer la página (leer cuesta ~0,3 s que no hay que perder).
+            # Con varios bloques, cada uno dispara su propia ráfaga al mismo tiempo (no se frenan entre sí).
+            dia_apertura = self.proxima_apertura(ahora).date()
+            pend_disparo = [d for d in objetivos if d.hecha_en is None or d.hecha_en <= dia_apertura]
             if cfg.disparo and not self.ticket and not cfg.dry_run and ultima_pagina is not None \
-                    and (duenio.hecha_en is None or duenio.hecha_en <= self.proxima_apertura(ahora).date()) \
-                    and self.en_ventana_disparo(ahora) \
-                    and disparo_hecho_para != self.proxima_apertura(ahora).date():
-                disparo_hecho_para = self.proxima_apertura(ahora).date()
-                intento = self.disparo_apertura(duenio, ultima_pagina)
-                if intento and intento.estado == "confirmada":
-                    duenio.reservada_aqui = True
-                    self.registrar_hecha(duenio, intento.evento, intento.pagina)
-                    self.resumen.append(f"⏱️ tú: confirmada con el disparo de apertura ({ahora:%H:%M:%S} BO)")
+                    and pend_disparo and self.en_ventana_disparo(ahora) and disparo_hecho_para != dia_apertura:
+                disparo_hecho_para = dia_apertura
+                n = len(pend_disparo)
+                maximo = cfg.disparo_maximo if n == 1 else max(8, (cfg.disparo_maximo * 2) // n)   # tope total ≈ 2× la ráfaga simple
+                conexiones = cfg.disparo_conexiones if n == 1 else max(4, cfg.disparo_conexiones // n + 2)
+                salida: dict[int, Intento | None] = {}
+
+                def _bloque(i: int, d: Persona, pag: Pagina = ultima_pagina) -> None:
+                    salida[i] = self.disparo_apertura(d, pag, maximo, conexiones)
+                hilos_b = [threading.Thread(target=_bloque, args=(i, d), daemon=True) for i, d in enumerate(pend_disparo)]
+                for hb in hilos_b:
+                    hb.start()
+                for hb in hilos_b:
+                    hb.join()
+                for i, d in enumerate(pend_disparo):
+                    intento = salida.get(i)
+                    if intento and intento.estado == "confirmada":
+                        d.reservada_aqui = True
+                        self.registrar_hecha(d, intento.evento, intento.pagina)
+                        self.resumen.append(f"⏱️ {d.etiqueta}: confirmada con el disparo de apertura")
             try:
                 p = self.obtener()
                 ultima_pagina = p
@@ -953,6 +992,7 @@ class Bot:
                     return self.terminar(EXIT_OK, f"Ticket #{self.ticket}: nada que hacer.")
                 self.personas = [persona_ticket]
                 duenio = persona_ticket  # la "principal" de esta corrida
+                objetivos = [persona_ticket]
                 self.notificar(f"🟢 Tu solicitud está activa: el bot vigila {persona_ticket.horario} "
                                f"para el {persona_ticket.fecha}.", topic=persona_ticket.ntfy)
                 validado = True
@@ -960,8 +1000,9 @@ class Bot:
                 desconocidas = [s for s in cfg.salas if s not in p.salas]
                 if desconocidas:
                     return self.terminar(EXIT_CONFIG, f"Salas inexistentes: {desconocidas}. Disponibles: {p.salas}", "error")
-                if p.horarios and cfg.horario not in p.horarios:
-                    return self.terminar(EXIT_CONFIG, f"Horario {cfg.horario} no existe. Disponibles: {p.horarios}", "error")
+                malos = [h for h in horarios if p.horarios and h not in p.horarios]
+                if malos:
+                    return self.terminar(EXIT_CONFIG, f"Horario {', '.join(malos)} no existe. Disponibles: {p.horarios}", "error")
                 log("Salas objetivo: " + ", ".join(f"{s}={p.salas[s]}" for s in cfg.salas))
                 validado = True
 
@@ -983,10 +1024,11 @@ class Bot:
                 proxima_recarga = time.monotonic() + 300
                 auto_antes = auto_ahora
 
-            ev = mi_reserva(p, duenio)
+            ev = mi_reserva(p, duenio)                       # bloque principal (para el latido)
+            todo_hecho = all(mi_reserva(p, d) is not None for d in objetivos) if objetivos else ev is not None
 
             # Arranque tardío: GitHub puede retrasar mucho los cron.
-            if tarde and not ev and not aviso_tarde_hecho:
+            if tarde and not todo_hecho and not aviso_tarde_hecho:
                 aviso_tarde_hecho = True
                 msg = (f"⚠️ El bot arrancó tarde ({ahora0:%H:%M} BO), después de la apertura de las "
                        f"{cfg.apertura_bo}. Reserva a mano si puedes; igual sigo intentando.")
@@ -995,15 +1037,15 @@ class Bot:
                 self.notificar(msg)
                 if time.monotonic() >= fin:  # ya pasó también la hora de fin
                     return self.terminar(EXIT_TARDE, msg, "error", resultado="tarde")
-            if ev and time.monotonic() >= fin:
+            if todo_hecho and time.monotonic() >= fin:
                 return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)", resultado="ya-la-tenia")
 
             # Latido: confirma al celular que el bot está vivo antes de la apertura.
-            if not latido_hecho and not ev and self.en_banda_apertura(ahora) and not cfg.dry_run:
+            if not latido_hecho and not todo_hecho and self.en_banda_apertura(ahora) and not cfg.dry_run:
                 latido_hecho = True
                 if not self.ticket:
                     self.notificar(f"🟢 Bot vigilando: salas {', '.join(p.salas.get(s, s) for s in cfg.salas)} "
-                                   f"· {cfg.horario}")
+                                   f"· {', '.join(horarios)}")
 
             # Atender a todos con la MISMA lectura (no se multiplica la carga al sitio).
             estados = []
@@ -1029,10 +1071,11 @@ class Bot:
             if sin_nada_que_hacer:
                 hasta_banda = self.segundos_hasta_banda(ahora)
                 if not self.en_banda_apertura(ahora) and time.monotonic() + hasta_banda > fin:
-                    if duenio.hecha_en == p.hoy:
-                        return self.terminar(EXIT_OK, "Reserva confirmada ✅" if duenio.reservada_aqui
+                    if objetivos and all(d.hecha_en == p.hoy for d in objetivos):
+                        algo = any(d.reservada_aqui for d in objetivos)
+                        return self.terminar(EXIT_OK, "Reserva confirmada ✅" if algo
                                              else "Ya tenías la reserva ✅ (no hice nada)",
-                                             resultado="reservada" if duenio.reservada_aqui else "ya-la-tenia")
+                                             resultado="reservada" if algo else "ya-la-tenia")
                     return self.terminar(EXIT_OK, "Horario de hoy ya pasó y la próxima apertura cae fuera de esta ejecución.",
                                          resultado="prueba" if cfg.dry_run else "nada")
                 if self.en_nucleo_apertura(ahora):
@@ -1050,8 +1093,7 @@ class Bot:
                 espera = cfg.intervalo_medio
             else:
                 espera = cfg.intervalo * random.uniform(1.0, 1.3)
-            if cfg.disparo and not self.ticket and not cfg.dry_run \
-                    and (duenio.hecha_en is None or duenio.hecha_en <= self.proxima_apertura(ahora).date()):
+            if cfg.disparo and not self.ticket and not cfg.dry_run and pend_disparo:
                 falta = self.segundos_hasta_disparo(ahora)
                 if 0 < falta < espera:
                     espera = falta   # despertar justo para el disparo de apertura
@@ -1077,13 +1119,20 @@ class Bot:
             return self.terminar(EXIT_OK, f"Ticket #{self.ticket}: " + (
                 "reserva confirmada ✅" if duenio.reservada_aqui else "terminado sin sala."),
                 resultado=self.resultado_de_personas())
-        if duenio.reservada_aqui:
-            return self.terminar(EXIT_OK, "Reserva confirmada ✅", resultado="reservada")
-        if duenio.hecha_en is not None and duenio.hecha_en == ultimo_hoy:
+        faltan = [d for d in objetivos if d.hecha_en != ultimo_hoy]
+        for d in faltan:
+            self.resumen.append(f"{ultimo_hoy}: {d.horario} no se liberó durante esta ejecución")
+        if any(d.reservada_aqui for d in objetivos):
+            if faltan and (latido_hecho or aviso_tarde_hecho):
+                self.notificar("⚠️ Reservé parte de tus bloques; faltó " + ", ".join(d.horario for d in faltan) + ". Revisa a mano.")
+            return self.terminar(EXIT_OK, "Reserva confirmada ✅" if not faltan else
+                                 "Reserva parcial: faltó " + ", ".join(d.horario for d in faltan),
+                                 "notice" if not faltan else "warning", resultado="reservada")
+        if objetivos and not faltan:
             return self.terminar(EXIT_OK, "Ya tenías la reserva ✅ (no hice nada)", resultado="ya-la-tenia")
-        self.resumen.append(f"{ultimo_hoy}: {cfg.horario} no se liberó durante esta ejecución")
         if latido_hecho or aviso_tarde_hecho:
-            self.notificar(f"❌ Terminé sin conseguir sala para {ultimo_hoy} {cfg.horario}. Revisa a mano.")
+            self.notificar(f"❌ Terminé sin conseguir sala para {ultimo_hoy} "
+                           f"{', '.join(d.horario for d in faltan)}. Revisa a mano.")
         return self.terminar(EXIT_OK, "Tiempo agotado: no se liberó la sala (no se reservó nada).", "warning",
                              resultado="prueba" if cfg.dry_run else "no-se-libero")
 

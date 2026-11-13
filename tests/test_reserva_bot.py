@@ -9,7 +9,8 @@ Ejecutar:  python -m pytest -q
 import json
 import sys
 import threading
-from datetime import date, datetime
+import time
+from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -90,8 +91,18 @@ def crear_handler(est: Estado):
             self.end_headers()
             self.wfile.write(datos)
 
+        def _dia_por_reloj(self):
+            cuando = getattr(est, "cambia_dia_cuando", None)
+            if cuando and cuando():
+                est.hoy = date.fromordinal(est.hoy.toordinal() + 1)
+                est.ocupado, est.cambia_dia_cuando = {}, None
+                cb = getattr(est, "al_cambiar_dia", None)
+                if cb:
+                    cb()
+
         def do_GET(self):
             with est.lock:
+                self._dia_por_reloj()
                 est.gets += 1
                 if est.modo == "caido":
                     return self._enviar("Service Unavailable", 503)
@@ -112,9 +123,15 @@ def crear_handler(est: Estado):
             largo = int(self.headers.get("Content-Length", 0))
             f = {k: v[0] for k, v in parse_qs(self.rfile.read(largo).decode()).items()}
             with est.lock:
+                self._dia_por_reloj()
                 est.posts.append(f)
                 nombre = f"{f['first_name']} {f['last_name']}"
                 sala, slot = f["room"], f["schedule"]
+                if getattr(est, "cambia_dia_cuando", None) and slot == "12:15-14:15":
+                    # como el sitio real: antes del cambio de día, el horario de «hoy» ya pasó y no se puede reservar
+                    # (el mensaje real puede ser este o «ya está ocupado» por la reserva de ayer: el bot no debe fiarse del texto)
+                    f["_rechazado_por_dia"] = True
+                    return self._enviar(est.html(alerta("danger", "Ese horario ya está ocupado.")))
                 if est.modo == "miente":  # dice éxito pero no guarda nada
                     return self._enviar(est.html(alerta("success", f"¡Reserva realizada! {slot}")))
                 if est.modo == "rechaza":
@@ -596,3 +613,60 @@ def test_workflow_muestra_cada_resultado():
         assert f'name: "Resultado: {codigo}"' in yml, codigo
         assert f"if: always() && steps.bot.outputs.resultado == '{codigo}'" in yml, codigo
         assert f'"{codigo}": [' in panel, f"el panel no sabe mostrar «{codigo}»"
+
+
+# ───────────────────────── disparo de apertura ─────────────────────────
+
+def reloj_que_avanza(inicio: datetime):
+    """Reloj Bolivia que arranca en `inicio` y avanza con el tiempo real (para probar la apertura)."""
+    t0 = time.monotonic()
+    return lambda: inicio + timedelta(seconds=time.monotonic() - t0)
+
+
+def test_disparo_envia_la_primera_sala_sin_esperar_a_leer_el_cambio_de_dia(servidor):
+    """A las 19:59:59,8 empieza a enviar la reserva de la F cada 0,1 s. El servidor rechaza hasta que
+    cambia de día (a las 20:00:00,4) y entonces la acepta: la F queda confirmada sin una sola lectura
+    intermedia de la página y antes de que el bucle normal vea el día nuevo."""
+    est, url = servidor("normal")
+    est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")   # ya tiene la de hoy
+    inicio = datetime(2026, 10, 23, 19, 59, 58, 500000, tzinfo=rb.BO_TZ)
+    reloj = reloj_que_avanza(inicio)
+    est.cambia_dia_cuando = lambda: reloj() >= datetime(2026, 10, 23, 20, 0, 0, 400000, tzinfo=rb.BO_TZ)
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=6, salas=["8", "6"], disparo_anticipo=0.2,
+                        disparo_segundos=2.5, disparo_intervalo=0.1))
+    assert bot.ejecutar() == 0
+    assert est.hoy == date(2026, 10, 24)
+    assert any(e["title"].endswith("Sala de estudio F") and e["start"].startswith("2026-10-24") for e in est.eventos)
+    rechazos = [p for p in est.posts if p.get("_rechazado_por_dia")]
+    assert len(est.posts) >= 3 and len(rechazos) >= 1, "debió insistir antes del cambio de día"
+    assert any("confirmada con el disparo de apertura" in l for l in bot.resumen)
+
+
+def test_disparo_si_otro_gana_la_f_sigue_con_la_d(servidor):
+    est, url = servidor("normal")
+    est.reservar("Hugo Rafael Zuñiga Daza", "8", "12:15-14:15")
+    inicio = datetime(2026, 10, 23, 19, 59, 59, 0, tzinfo=rb.BO_TZ)
+    reloj = reloj_que_avanza(inicio)
+    est.cambia_dia_cuando = lambda: reloj() >= datetime(2026, 10, 23, 20, 0, 0, 200000, tzinfo=rb.BO_TZ)
+    est.al_cambiar_dia = lambda: est.reservar("ari m", "8", "12:15-14:15")   # un bot local gana la F al instante
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=6, salas=["8", "6"], disparo_intervalo=0.1))
+    assert bot.ejecutar() == 0
+    assert any(e["title"].endswith("Sala de estudio D") and e["title"].startswith("Hugo") for e in est.eventos)
+    assert not any(e["title"].startswith("Hugo") and e["title"].endswith("Sala de estudio F")
+                   and e["start"].startswith("2026-10-24") for e in est.eventos)
+    assert len(est.posts) <= 25, "la ráfaga tiene tope"
+
+
+def test_disparo_no_aplica_a_tickets_ni_dry_run_ni_desactivado(servidor):
+    est, url = servidor("normal")
+    inicio = datetime(2026, 10, 23, 19, 59, 59, 500000, tzinfo=rb.BO_TZ)
+    reloj = reloj_que_avanza(inicio)
+    est.cambia_dia_cuando = lambda: reloj() >= datetime(2026, 10, 23, 20, 0, 0, 300000, tzinfo=rb.BO_TZ)
+    bot = rb.Bot(config(url, reloj=reloj, max_segundos=3, salas=["8"], disparo=False))
+    bot.ejecutar()
+    assert not any(p.get("_rechazado_por_dia") for p in est.posts), "sin disparo no se envía antes del cambio de día"
+    est2, url2 = servidor("normal")
+    reloj2 = reloj_que_avanza(inicio)
+    est2.cambia_dia_cuando = lambda: reloj2() >= datetime(2026, 10, 23, 20, 0, 0, 300000, tzinfo=rb.BO_TZ)
+    rb.Bot(config(url2, reloj=reloj2, max_segundos=3, salas=["8"], dry_run=True)).ejecutar()
+    assert est2.posts == []

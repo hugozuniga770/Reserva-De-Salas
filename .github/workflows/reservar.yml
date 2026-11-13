@@ -102,6 +102,8 @@ jobs:
           UPB_AUTO_APROBAR_BO: ${{ vars.UPB_AUTO_APROBAR_BO || '18:30' }}
           UPB_MAX_PERSONAS:    ${{ vars.UPB_MAX_PERSONAS    || '4' }}
           UPB_MAX_POR_PERSONA: ${{ vars.UPB_MAX_POR_PERSONA || '2' }}
+          UPB_DISPARO:         ${{ vars.UPB_DISPARO || '1' }}
+          UPB_DISPARO_MS:      ${{ vars.UPB_DISPARO_MS || '200' }}
         run: python reserva_bot.py
 
       # Resultado legible: solo se ejecuta el paso que corresponde (los demás quedan «skipped»).
